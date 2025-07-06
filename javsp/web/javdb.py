@@ -144,7 +144,7 @@ def parse_data(movie: MovieInfo):
 
     target_id = normalize_id(movie.dvdid)
     print(ids,"idddddddssss")
-    print(target_id,"target_idtarget_id")
+    print("-----------",target_id,"target_idtarget_id")
     matches = [i for i in ids if i == target_id]
     print(matches,"matchesmatchesmatchesmatches")
     if len(matches) == 0:
