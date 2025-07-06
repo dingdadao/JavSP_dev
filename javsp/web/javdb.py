@@ -131,7 +131,7 @@ def get_valid_cookies():
     return None
 
 def normalize_id(s):
-    return s.lower().replace(' ','')
+    return s.strip().lower().replace(' ', '').replace('\u3000', '')
 
 def parse_data(movie: MovieInfo):
     """抓取并解析指定番号的影片信息"""
@@ -322,7 +322,7 @@ if __name__ == "__main__":
     if valid_cookies:
         request.cookies = valid_cookies
 
-    movie = MovieInfo('FC2-2735981')
+    movie = MovieInfo('NKMTNDVAJ-331')
     try:
         parse_clean_data(movie)
         print(movie)
