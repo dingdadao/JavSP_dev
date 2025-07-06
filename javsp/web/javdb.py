@@ -142,6 +142,7 @@ def parse_data(movie: MovieInfo):
     print(movie_urls,"-------movie_urls------")
 
     matches = [i for i in ids if i == movie.dvdid.lower()]
+    print(matches,"matchesmatchesmatchesmatches")
     if len(matches) == 0:
         raise MovieNotFoundError(__name__, movie.dvdid, ids)
     elif len(matches) > 1:
