@@ -150,6 +150,7 @@ def parse_data(movie: MovieInfo):
         new_url = movie_urls[index]
     except:
         raise MovieNotFoundError(__name__, movie.dvdid, ids)
+
     try:
         html2 = get_html_wrapper(new_url)
     except (SitePermissionError, CredentialError):

@@ -61,7 +61,7 @@ def get_id(filepath_str: str) -> str:
         if match:
             return match.group(1) + '-' + match.group(2)
         # 普通番号，优先尝试匹配带分隔符的（如ABC-123）
-        match = re.search(r'([A-Z]{2,15})[-_](\d{2,5})', norm, re.I)
+        match = re.search(r'([A-Z]{2,9})[-_](\d{2,5})', norm, re.I)
         if match:
             return match.group(1) + '-' + match.group(2)
         # 普通番号，运行到这里时表明无法匹配到带分隔符的番号
