@@ -148,7 +148,9 @@ def parse_data(movie: MovieInfo):
         raise MovieDuplicateError(__name__, movie.dvdid, len(matches))
 
     index = ids.index(movie.dvdid.lower())
+    print(index,"indexindexindexindexindex")
     new_url = movie_urls[index]
+    print(new_url,"new_urlnew_urlnew_urlnew_urlnew_urlnew_url")
 
     try:
         html2 = get_html_wrapper(new_url)
