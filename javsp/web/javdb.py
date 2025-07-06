@@ -58,36 +58,45 @@ def retry_request(url, max_retries=3, delay=3):
 
 
 def get_html_wrapper(url):
-    """请求网页，处理Cloudflare和Cookies切换"""
-    global request, cookies_pool
+    """
+    使用提供的 Cookies 请求网页，处理 Cloudflare、登录重定向、VIP 限制。
+    """
+    global request
 
-    response = retry_request(url)
+    # 固定 Cookie 值（你 curl 的那段复制过来）
+    JAVDB_COOKIES = {
+        "list_mode": "h",
+        "theme": "auto",
+        "locale": "zh",
+        "over18": "1",
+        "cf_clearance": "PqwcU16z0mfu5TGFYHTlHYcCFS5aYgK5isXQVfBzATk-1751812866-1.2.1.1-BXv0Fbiug.S_Qgxv2tkk3VuKXZqTWDsR1gcg3zLr2o3cYGCkL1JGkPeMnHWKKvRHEvPT7tQNeGNMW3a732IbhsJgVAm7cD2Z4Sm.XjsogXlq_zTN4PbfElORbi24b9hXHaFEqK03ce3UCF1m2Kuhh06rZHiixAExXrxuQ0Da8MmKe80hE__fu58SFzUAqZ_ZocZtnuD9UZd4r9cpo7uErG2174hzHUWYkegokqjXZjE",
+        "_ym_uid": "1751812866757350996",
+        "_ym_d": "1751812866",
+        "_ym_isad": "2",
+        "_jdb_session": "/OD1/kRpJxsURHEtKBkClNdK5xs4GPrkaz/RuKCs3ny5OJO7l9lOcRAlfaHLv2MpNumBqfjQJUtucs4G8wmCmO2GV4BlxlpviEPUdYK+ORnchrf3qbT2iKo3ZLT5EBLtWjBHIFHvmJmYw2OnixhylYfbkn0duHzxGcjxkfNX12EwqHOB4RxIYhiV4kWy3ULi5EragdfYzrlVHfCsgTBOdLj05x3lpgalQtePfGWGNIgCtOZroCsUMnf22Pgu3QoLFE2BTCILszLfOikk6zm5ZOMdOKYzoWy/6j0N5rCG95JcDZi/qg3FBcwF--O94QVEMoOpRsLv2v--NT2KQBmTgWmpev/6PyelAA=="
+    }
 
+    try:
+        response = request.get(url, cookies=JAVDB_COOKIES)
+    except Exception as e:
+        logger.error(f"请求失败: {url}，错误: {e}", exc_info=True)
+        raise
+
+    # 登录重定向检测
     if response.history and '/login' in response.url:
-        # 登录跳转，尝试切换Cookies
-        if not cookies_pool:
-            try:
-                cookies_pool = get_browsers_cookies()
-                logger.info(f"加载浏览器Cookies，共{len(cookies_pool)}条")
-            except Exception as e:
-                logger.warning(f"获取浏览器Cookies失败: {e}", exc_info=True)
-                cookies_pool = []
+        raise CredentialError("JavDB: 提供的 Cookies 已失效，页面跳转至登录页")
 
-        if cookies_pool:
-            item = cookies_pool.pop()
-            request = Request(use_scraper=True)  # 重新创建实例防止旧cookies影响
-            request.cookies = item['cookies']
-            cookies_source = (item['profile'], item['site'])
-            logger.debug(f'切换Cookies为: {cookies_source}')
-            return get_html_wrapper(url)
-        else:
-            raise CredentialError('JavDB: 所有浏览器Cookies均已过期')
-
+    # VIP资源页面检测
     if response.history and 'pay' in response.url.split('/')[-1]:
-        raise SitePermissionError(f"JavDB: 资源仅VIP可见: '{response.history[0].url}'")
+        raise SitePermissionError(f"JavDB: 资源仅 VIP 可见: '{response.history[0].url}'")
 
-    html = resp2html(response)
-    return html
+    try:
+        html = resp2html(response)
+        return html
+    except Exception as e:
+        logger.error(f"HTML 解析失败: {e}", exc_info=True)
+        raise
+
 
 
 def get_user_info(site, cookies):
@@ -123,7 +132,6 @@ def get_valid_cookies():
 def parse_data(movie: MovieInfo):
     """抓取并解析指定番号的影片信息"""
     html = get_html_wrapper(f'{base_url}/search?q={movie.dvdid}')
-    print(html.text_content(),"-----------------------------------------获取下问题")
     logger.info(html,"----------------------------获取下问题")
     ids = [i.lower() for i in html.xpath("//div[@class='video-title']/strong/text()")]
     movie_urls = html.xpath("//a[@class='box']/@href")
