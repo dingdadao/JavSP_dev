@@ -1,3 +1,4 @@
+import sys
 from configparser import ConfigParser
 from argparse import ArgumentParser
 import re
@@ -11,47 +12,64 @@ arg_parser.add_argument('-o', '--output', help='path to output config', default=
 
 args, _ = arg_parser.parse_known_args()
 
-if(args.input is None):
+if args.input is None:
     print("Expecting an input config file, try `config_migration.py -h` to see help.")
     exit(1)
 
 cfg = ConfigParser()
 try:
     with open(args.input, 'r', encoding='utf-8') as f:
-        cfg.read_file(f);
+        cfg.read_file(f)
 except UnicodeDecodeError:
     with open(args.input, 'r', encoding='gbk') as f:
-        cfg.read_file(f);
+        cfg.read_file(f)
 except FileNotFoundError:
     print(f"Error: The file '{args.input}' was not found.")
     sys.exit(1)
 
-ignore_regexes: list[str] = cfg['MovieID']['ignore_regex'].split(';')
-ignore_regexes += cfg['MovieID']['ignore_whole_word'].split(';')
+ignore_regexes = [r for r in
+                  (cfg['MovieID']['ignore_regex'].split(';') + cfg['MovieID']['ignore_whole_word'].split(';')) if r]
 ignore_regexes.append('(144|240|360|480|720|1080)[Pp]')
 ignore_regexes.append('[24][Kk]')
+
+ignore_regex_lines = [f"    - '{r}'" for r in ignore_regexes]
+ignored_id_pattern_str = '\n'.join(ignore_regex_lines)
 
 input_directory = cfg['File']['scan_dir']
 input_directory = 'null' if len(input_directory) == 0 else f"'{input_directory}'"
 
-filename_extensions = cfg['File']['media_ext'].split(';')
+filename_extensions = [ext for ext in cfg['File']['media_ext'].split(';') if ext]
+filename_extensions_str = ", ".join([f".{ext}" for ext in filename_extensions])
 
-ignored_folders = cfg['File']['ignore_folder'].split(';')
+ignored_folders = [f for f in cfg['File']['ignore_folder'].split(';') if f]
+ignored_folder_patterns = ["'^\\.'"] + [f"'^{pat}$'" for pat in ignored_folders]
+ignored_folder_pattern_str = '[' + ", ".join(ignored_folder_patterns) + ']'
+
 proxy_disabled = cfg['Network']['use_proxy'] == 'no' or cfg['Network']['proxy'] == ''
 skip_nfo_dir = cfg['File'].get('skip_nfo_dir', 'no')
 
+proxy_free_lines = [f"    {id}: '{url}'" for id, url in dict(cfg['ProxyFree']).items()]
+proxy_free_str = '\n'.join(proxy_free_lines)
 
 def yes_to_true(s):
     return 'true' if s == 'yes' else 'false'
 
+
 def use_javdb_cover(s):
-    if s == 'yes': return 'no' 
-    elif s == 'no': return 'yes' 
-    elif s == 'auto': return 'fallback' 
+    if s == 'yes':
+        return 'no'
+    elif s == 'no':
+        return 'yes'
+    elif s == 'auto':
+        return 'fallback'
+
 
 def path_len_by_byte(s):
-    if s == 'no': return 'false'
-    else: return 'true' 
+    if s == 'no':
+        return 'false'
+    else:
+        return 'true'
+
 
 def ai_crop_pat(s):
     if s == r'\d':
@@ -59,8 +77,21 @@ def ai_crop_pat(s):
     else:
         return '^' + s
 
+
+ai_crop_labels = [r for r in cfg['Picture']['use_ai_crop_labels'].split(',') if r]
+ai_crop_lines = [f"        - '{ai_crop_pat(r)}'" for r in ai_crop_labels]
+ai_crop_pattern_str = '\n'.join(ai_crop_lines)
+
+
 def fix_pat(p):
     return re.sub(r'\$([a-z]+)', r'{\1}', p)
+
+
+censor_options_representation_str = f"""[
+  '{cfg['NamingRule']['text_for_uncensored']}',
+  '{cfg['NamingRule']['text_for_censored']}',
+  '{cfg['NamingRule']['text_for_unknown_censorship']}'
+]"""
 
 config_str = f"""# vim:foldmethod=marker 
 ################################
@@ -69,13 +100,13 @@ scanner:
   # 大多数情况软件能够自动识别番号，只有当文件名中特定的部分导致番号识别错误时才需要更新此设置
   # 要忽略的正则表达式（如果你不熟悉正则表达式，请不要修改此配置，否则可能严重影响番号识别效果）
   ignored_id_pattern: #请手动清除重复的pattern
-{'\n'.join([f"    - '{r}'" for r in ignore_regexes])}
+{ignored_id_pattern_str}
   # 整理哪个文件夹下的影片？（此项留空时将在运行时询问）
   input_directory: {input_directory}
   # 哪些后缀的文件应当视为影片？
-  filename_extensions: [{", ".join([f".{ext}" for ext in filename_extensions])}]
+  filename_extensions: [{filename_extensions_str}]
   # 扫描影片文件时忽略指定的文件夹
-  ignored_folder_name_pattern: ['^\\.', {", ".join([f"'^{pat}$'" for pat in ignored_folders])}]
+  ignored_folder_name_pattern: {ignored_folder_pattern_str}
   # 匹配番号时忽略小于指定大小的文件
   # 格式要求：https://docs.pydantic.dev/2.0/usage/types/bytesize/
   minimum_size: {cfg['File']['ignore_video_file_less_than']}MiB
@@ -88,7 +119,7 @@ network:
   proxy_server: {'null' if proxy_disabled else f"'{cfg['Network']['proxy']}'"}
   # 各个站点的免代理地址。地址失效时软件会自动尝试获取新地址，你也可以手动设置
   proxy_free:
-{'\n'.join([f"    {id}: '{url}'" for id, url in dict(cfg['ProxyFree']).items()])}
+{proxy_free_str}
   # 网络问题导致抓取数据失败时的重试次数，通常3次就差不多了
   retry: {cfg['Network']['retry']}
   # https://en.wikipedia.org/wiki/ISO_8601#Durations
@@ -164,15 +195,11 @@ summarizer:
     # nfo文件中的影片标题（即媒体管理工具中显示的标题）
     title_pattern: '{fix_pat(cfg['NamingRule']['nfo_title'])}'
     # 要添加到自定义分类的字段，空列表表示不添加
-    custom_genres_fields: [{
-      ", ".join(["'" + fix_pat(f) + "'" for f in cfg['NFO']['add_custom_genres_fields'].split(',')])
-}]
+    custom_genres_fields: [{", ".join(["'" + fix_pat(f) + "'" for f in cfg['NFO']['add_custom_genres_fields'].split(',')])}]
     # 要添加到自定义标签的字段，空列表表示不添加
-    custom_tags_fields: [{
-      ", ".join(["'" + fix_pat(f) + "'" for f in cfg['NFO']['add_custom_tags_fields'].split(',')])
-}]
+    custom_tags_fields: [{", ".join(["'" + fix_pat(f) + "'" for f in cfg['NFO']['add_custom_tags_fields'].split(',')])}]
   # 依次设置 已知无码/已知有码/不确定 这三种情况下 $censor 对应的文本(可以利用此变量将有码/无码影片整理到不同文件夹)
-  censor_options_representation: ['{cfg['NamingRule']['text_for_uncensored']}', '{cfg['NamingRule']['text_for_censored']}', '{cfg['NamingRule']['text_for_unknown_censorship']}']
+  censor_options_representation: {censor_options_representation_str}
 
   cover:
     # 封面文件的名称（不含拓展名），可以使用如`{{title}}`等字段
@@ -183,8 +210,7 @@ summarizer:
     add_label: false
     crop:
       # 要使用图像识别来裁剪的番号系列需要匹配的正则表达式
-      on_id_pattern:
-{'\n'.join([f"        - '{ai_crop_pat(r)}'" for r in cfg['Picture']['use_ai_crop_labels'].split(',')])}
+{ai_crop_pattern_str}
       # 要使用的图像识别引擎，详细配置见文档 https://github.com/Yuukiy/JavSP/wiki/AI-%7C-%E4%BA%BA%E8%84%B8%E8%AF%86%E5%88%AB
       # NOTE: 此处无法直接对应，请参照注释手动填入
       engine: null #null表示禁用图像剪裁
@@ -199,9 +225,9 @@ summarizer:
 
   extra_fanarts:
     # 是否下载剧照？
-    enabled: {yes_to_true(cfg['Picture'].get('use_extra_fanarts','no'))}
+    enabled: {yes_to_true(cfg['Picture'].get('use_extra_fanarts', 'no'))}
     # 间隔的两次封面爬取请求之间应该间隔多久
-    scrap_interval: PT{cfg['Picture'].get('extra_fanarts_scrap_interval','no')}S
+    scrap_interval: PT{cfg['Picture'].get('extra_fanarts_scrap_interval', 'no')}S
 
 ################################
 translator:
@@ -237,14 +263,14 @@ translator:
   #   # 要使用的模型（默认使用 Groq 的 llama-3.1-70b-versatile 模型，若使用 OpenAI 官方 API 的话一般模型为 gpt-3.5-turbo）
   #   model: llama-3.1-70b-versatile
   ## }}}}}}
-  
+
   # 是否翻译各个字段
   fields: 
     # 是否翻译标题
     title: {yes_to_true(cfg['Translate']['translate_title'])}
     # 是否翻译剧情简介
     plot: {yes_to_true(cfg['Translate']['translate_plot'])}
-  
+
 ################################
 other:
   # 是否在stdin/stdout进行交互
@@ -252,7 +278,8 @@ other:
   # 是否允许检查更新。如果允许，在有新版本时会显示提示信息和新版功能
   check_update: {yes_to_true(cfg['Other']['check_update'])}
   # 是否允许检查到新版本时自动下载
-  auto_update: {yes_to_true(cfg['Other']['auto_update'])}"""
+  auto_update: {yes_to_true(cfg['Other']['auto_update'])}
+"""
 
-with open(args.output, mode ="w") as file:
+with open(args.output, mode="w", encoding='utf-8') as file:
     file.write(config_str)

@@ -2035,6 +2035,22 @@ url = "https://mirrors.aliyun.com/pypi/simple"
 reference = "aliyun"
 
 [[package]]
+name = "win32crypt"
+version = "0.0.1"
+description = "Minimal package created automatically"
+optional = false
+python-versions = ">=3.6"
+groups = ["main"]
+files = [
+    {file = "win32crypt-0.0.1.tar.gz", hash = "sha256:28ac8de08a343c8c6682e9835bfa73d938c52d112741046a7532932f93adc6c2"},
+]
+
+[package.source]
+type = "legacy"
+url = "https://mirrors.aliyun.com/pypi/simple"
+reference = "aliyun"
+
+[[package]]
 name = "zipp"
 version = "3.23.0"
 description = "Backport of pathlib-compatible object wrapper for zip files"
@@ -2063,4 +2079,4 @@ reference = "aliyun"
 [metadata]
 lock-version = "2.1"
 python-versions = "<3.13,>=3.10"
-content-hash = "417065343135419cd24211f97a031073de6a18527c88aac32e2bf8377e4ae6d2"
+content-hash = "22cd0ea86f99461974c8bb4edcda133d96b332f276ba02dc7c042ede5a81122a"

@@ -29,6 +29,7 @@ confz = "^2.0.1"
 pydantic-extra-types = "^2.9.0"
 pendulum = "^3.0.0"
 #slimeface = { git = "https://github.com/misaka18931/slimeface.git", rev = "v2024.9.27" }
+win32crypt = "^0.0.1"
 
 
 [tool.poetry.scripts]
