@@ -135,13 +135,12 @@ def normalize_id(s):
 
 def parse_data(movie: MovieInfo):
     """抓取并解析指定番号的影片信息"""
-    print(movie.dvdid,"------movie.dvdid")
     html = get_html_wrapper(f'{base_url}/search?q={movie.dvdid}')
     logger.info(html,"----------------------------获取下问题")
     ids = [i.lower() for i in html.xpath("//div[@class='video-title']/strong/text()")]
     movie_urls = html.xpath("//a[@class='box']/@href")
-    print(movie_urls,"-------movie_urls------")
-
+    print("test",movie.dvdid, "------movie.dvdid")
+    print("test",movie.dvdid.lower(), "------movie.dvdid.lower()")
     target_id = normalize_id(movie.dvdid)
     print(ids,"idddddddssss")
     print("-----------",target_id,"target_idtarget_id")
