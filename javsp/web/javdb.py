@@ -79,7 +79,6 @@ def get_html_wrapper(url):
     try:
         request.cookies = JAVDB_COOKIES
         response = request.get(url)
-        print(response.text)
     except Exception as e:
         logger.error(f"请求失败: {url}，错误: {e}", exc_info=True)
         raise
@@ -133,10 +132,14 @@ def get_valid_cookies():
 
 def parse_data(movie: MovieInfo):
     """抓取并解析指定番号的影片信息"""
+    print(movie.dvdid,"------movie.dvdid")
     html = get_html_wrapper(f'{base_url}/search?q={movie.dvdid}')
     logger.info(html,"----------------------------获取下问题")
+    print(html.text_content(),"--------------")
     ids = [i.lower() for i in html.xpath("//div[@class='video-title']/strong/text()")]
+    print(ids,"-------------------------")
     movie_urls = html.xpath("//a[@class='box']/@href")
+    print(movie_urls,"-------------")
 
     matches = [i for i in ids if i == movie.dvdid.lower()]
     if len(matches) == 0:
@@ -149,6 +152,7 @@ def parse_data(movie: MovieInfo):
 
     try:
         html2 = get_html_wrapper(new_url)
+        print(html2.text_content(),"=============222222")
     except (SitePermissionError, CredentialError):
         # VIP限制，取搜索页的部分信息
         box = html.xpath("//a[@class='box']")[index]
