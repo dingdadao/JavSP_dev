@@ -21,7 +21,7 @@ def prepare_files(files):
         path = os.path.join(tmp_folder, i)
         folder = os.path.split(path)[0]
         if folder and (not os.path.exists(folder)):
-            os.makedirs(folder)
+            os.makedirs(folder, exist_ok=True)
         with open(path, 'wt', encoding='utf-8') as f:
             f.write(path)
     yield

@@ -31,7 +31,7 @@ def prepare_files(files):
         path = os.path.join(tmp_folder, name)
         folder = os.path.split(path)[0]
         if folder and (not os.path.exists(folder)):
-            os.makedirs(folder)
+            os.makedirs(folder, exist_ok=True)
         touch_file_size(path, size)
     yield
     rmtree(tmp_folder)

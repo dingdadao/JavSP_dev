@@ -462,7 +462,7 @@ def RunNormalMode(all_movies):
             generate_names(movie)
             check_step(movie.save_dir, '无法按命名规则生成目标文件夹')
             if not os.path.exists(movie.save_dir):
-                os.makedirs(movie.save_dir)
+                os.makedirs(movie.save_dir, exist_ok=True)
 
             inner_bar.set_description('下载封面图片')
             if Cfg().summarizer.cover.highres:
@@ -489,7 +489,7 @@ def RunNormalMode(all_movies):
                 inner_bar.set_description('下载剧照')
                 if movie.info.preview_pics:
                     extrafanartdir = movie.save_dir + '/extrafanart'
-                    os.mkdir(extrafanartdir)
+                    os.makedirs(extrafanartdir, exist_ok=True)
                     for (id, pic_url) in enumerate(movie.info.preview_pics):
                         inner_bar.set_description(f"Downloading extrafanart {id} from url: {pic_url}")
                                                                                                                                 
