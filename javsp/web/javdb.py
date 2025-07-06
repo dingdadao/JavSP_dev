@@ -131,7 +131,7 @@ def get_valid_cookies():
     return None
 
 def normalize_id(s):
-    return s.lower().replace('')
+    return s.lower().replace(' ','')
 
 def parse_data(movie: MovieInfo):
     """抓取并解析指定番号的影片信息"""
