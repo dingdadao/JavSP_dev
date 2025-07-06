@@ -11,14 +11,14 @@ scanner:
     - 'Carib(beancom)?'
     - '[^a-z\d](f?hd|lt)[^a-z\d]'
   # 整理哪个文件夹下的影片？（此项留空时将在运行时询问）
-  input_directory: '/Users/dension/job/JavSP_dev/test/'
+  input_directory: '/volume1/Media/actress/'
   # 哪些后缀的文件应当视为影片？
   filename_extensions: [.3gp, .avi, .f4v, .flv, .iso, .m2ts, .m4v, .mkv, .mov, .mp4, .mpeg, .rm, .rmvb, .ts, .vob, .webm, .wmv, .strm, .mpg]
   # 扫描影片文件时忽略指定的文件夹
   ignored_folder_name_pattern: ['^\.', '^#recycle$', '^#整理完成$', '^#不要扫描$']
   # 匹配番号时忽略小于指定大小的文件
   # 格式要求：https://docs.pydantic.dev/2.0/usage/types/bytesize/
-  minimum_size: 0MiB
+  minimum_size: 300MiB
   skip_nfo_dir: yes
   manual: no
 ################################
@@ -41,9 +41,8 @@ network:
 crawler:
   # 要使用的爬虫列表（汇总数据时从前到后进行）
   # airav avsox avwiki fanza fc2 fc2fan javbus javdb javlib javmenu jav321 mgstage prestige arzon_iv
-  # airav, avsox, javbus, javdb, javlib, jav321, mgstage, prestige
   selection:
-    normal: [javdb,]
+    normal: [airav, avsox, javbus, javdb, javlib, jav321, mgstage, prestige]
     fc2: [fc2, avsox, javdb, javmenu, fc2ppvdb]
     cid: [fanza]
     getchu: [dl_getchu]
@@ -75,7 +74,7 @@ summarizer:
   # 路径相关的选项
   path: 
     # 存放影片、封面等文件的文件夹路径
-    output_folder_pattern: '/Users/dension/job/JavSP_dev/test/{actress}/[{num}] {title}'
+    output_folder_pattern: '/volume1/Media/actress/{actress}/[{num}] {title}'
     # 影片、封面、nfo信息文件等的文件名将基于下面的规则来创建
     basename_pattern: '{num}'
     # 允许的最长文件路径（路径过长时将据此自动截短标题）
