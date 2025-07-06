@@ -504,8 +504,10 @@ def RunNormalMode(all_movies):
                                 logger.info(f"已下载剧照{pic_url} {id}.png: {width}x{height}, {filesize} [{elapsed}, {speed}]")
                             else:
                                 check_step(False, f"下载剧照{id}: {pic_url}失败")
+                                continue
                         except:
                             check_step(False, f"下载剧照{id}: {pic_url}失败")
+                            continue
                         time.sleep(scrape_interval)
                 check_step(True)
 
