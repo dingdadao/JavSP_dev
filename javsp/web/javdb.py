@@ -139,11 +139,11 @@ def parse_data(movie: MovieInfo):
     html = get_html_wrapper(f'{base_url}/search?q={movie.dvdid}')
     logger.info(html,"----------------------------获取下问题")
     ids = [i.lower() for i in html.xpath("//div[@class='video-title']/strong/text()")]
-    print(ids,"idsidsidsidsids")
     movie_urls = html.xpath("//a[@class='box']/@href")
     print(movie_urls,"-------movie_urls------")
 
     target_id = normalize_id(movie.dvdid)
+    print(ids,"idddddddssss")
     matches = [i for i in ids if i == target_id]
     print(matches,"matchesmatchesmatchesmatches")
     if len(matches) == 0:
