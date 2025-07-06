@@ -130,6 +130,8 @@ def get_valid_cookies():
             logger.debug(f"{item['profile']}, {item['site']} Cookies无效")
     return None
 
+def normalize_id(s):
+    return s.lower().replace('')
 
 def parse_data(movie: MovieInfo):
     """抓取并解析指定番号的影片信息"""
@@ -141,14 +143,15 @@ def parse_data(movie: MovieInfo):
     movie_urls = html.xpath("//a[@class='box']/@href")
     print(movie_urls,"-------movie_urls------")
 
-    matches = [i for i in ids if i == movie.dvdid.lower()]
+    target_id = normalize_id(movie.dvdid)
+    matches = [i for i in ids if i == target_id]
     print(matches,"matchesmatchesmatchesmatches")
     if len(matches) == 0:
         raise MovieNotFoundError(__name__, movie.dvdid, ids)
     elif len(matches) > 1:
         raise MovieDuplicateError(__name__, movie.dvdid, len(matches))
 
-    index = ids.index(movie.dvdid.lower())
+    index = ids.index(target_id)
     print(index,"indexindexindexindexindex")
     new_url = movie_urls[index]
     print(new_url,"new_urlnew_urlnew_urlnew_urlnew_urlnew_url")
