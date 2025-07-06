@@ -139,26 +139,19 @@ def parse_data(movie: MovieInfo):
     logger.info(html,"----------------------------获取下问题")
     ids = [i.lower() for i in html.xpath("//div[@class='video-title']/strong/text()")]
     movie_urls = html.xpath("//a[@class='box']/@href")
-    print("test",movie.dvdid, "------movie.dvdid")
-    print("test",movie.dvdid.lower(), "------movie.dvdid.lower()")
     target_id = normalize_id(movie.dvdid)
-    print(ids,"idddddddssss")
-    print("-----------",target_id,"target_idtarget_id")
     matches = [i for i in ids if i == target_id]
-    print(matches,"matchesmatchesmatchesmatches")
     if len(matches) == 0:
         raise MovieNotFoundError(__name__, movie.dvdid, ids)
     elif len(matches) > 1:
         raise MovieDuplicateError(__name__, movie.dvdid, len(matches))
-
-    index = ids.index(target_id)
-    print(index,"indexindexindexindexindex")
-    new_url = movie_urls[index]
-    print(new_url,"new_urlnew_urlnew_urlnew_urlnew_urlnew_url")
-
+    try:
+        index = ids.index(target_id)
+        new_url = movie_urls[index]
+    except:
+        raise MovieNotFoundError(__name__, movie.dvdid, ids)
     try:
         html2 = get_html_wrapper(new_url)
-        print(html2.text_content(),"=============222222")
     except (SitePermissionError, CredentialError):
         # VIP限制，取搜索页的部分信息
         box = html.xpath("//a[@class='box']")[index]
