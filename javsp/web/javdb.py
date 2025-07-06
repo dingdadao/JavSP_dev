@@ -77,7 +77,8 @@ def get_html_wrapper(url):
     }
 
     try:
-        response = request.get(url, cookies=JAVDB_COOKIES)
+        request.cookies = JAVDB_COOKIES
+        response = request.get(url)
     except Exception as e:
         logger.error(f"请求失败: {url}，错误: {e}", exc_info=True)
         raise
