@@ -43,7 +43,7 @@ crawler:
   # airav avsox avwiki fanza fc2 fc2fan javbus javdb javlib javmenu jav321 mgstage prestige arzon_iv
   # airav, avsox, javbus, javdb, javlib, jav321, mgstage, prestige
   selection:
-    normal: [javdb, mgstage, prestige,javlib, jav321, avsox, javbus, ]
+    normal: [javdb, avsox，mgstage, prestige]
     fc2: [fc2, avsox, javdb, javmenu, fc2ppvdb]
     cid: [fanza]
     getchu: [dl_getchu]
@@ -106,7 +106,7 @@ summarizer:
     # nfo文件的名称
     basename_pattern: "movie"
     # nfo文件中的影片标题（即媒体管理工具中显示的标题）
-    title_pattern: '{num} {title}'
+    title_pattern: '{title} {num}'
     # 要添加到自定义分类的字段，空列表表示不添加
     custom_genres_fields: ['{genre}', '{censor}']
     # 要添加到自定义标签的字段，空列表表示不添加
