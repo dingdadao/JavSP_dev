@@ -421,14 +421,18 @@ def process_poster(movie: Movie):
             fanart_cropped = add_label_to_poster(fanart_cropped, UNCENSORED_MARK_FILE, LabelPostion.BOTTOM_LEFT)
     fanart_cropped.save(movie.poster_file)
 
+
 def RunNormalMode(all_movies):
     """普通整理模式"""
-    def check_step(result, msg='步骤错误'):
+
+    def check_step(result, msg='步骤错误', should_continue=True):
         """检查一个整理步骤的结果，并负责更新tqdm的进度"""
         if result:
             inner_bar.update()
         else:
-            raise Exception(msg + '\n')
+            logger.error(msg)
+            if not should_continue:
+                raise Exception(msg + '\n')
 
     outer_bar = tqdm(all_movies, desc='整理影片', ascii=True, leave=False)
     total_step = 6
@@ -444,90 +448,118 @@ def RunNormalMode(all_movies):
             filenames = [os.path.split(i)[1] for i in movie.files]
             logger.info('正在整理: ' + ', '.join(filenames))
             inner_bar = tqdm(total=total_step, desc='步骤', ascii=True, leave=False)
+
             # 依次执行各个步骤
             inner_bar.set_description(f'启动并发任务')
-            all_info = parallel_crawler(movie, inner_bar)
-            msg = f'为其配置的{len(Cfg().crawler.selection[movie.data_src])}个抓取器均未获取到影片信息'
-            check_step(all_info, msg)
+            all_info = None
+            try:
+                all_info = parallel_crawler(movie, inner_bar)
+                check_step(all_info,
+                           f'为其配置的{len(Cfg().crawler.selection[movie.data_src])}个抓取器均未获取到影片信息',
+                           should_continue=False)
+            except Exception as e:
+                logger.error(f"并发任务失败: {e}")
+                check_step(False, f"并发任务失败: {e}", should_continue=True)
 
             inner_bar.set_description('汇总数据')
-            has_required_keys = info_summary(movie, all_info)
-            check_step(has_required_keys)
+            has_required_keys = False
+            try:
+                has_required_keys = info_summary(movie, all_info)
+                check_step(has_required_keys, '影片信息缺少必要字段', should_continue=True)
+            except Exception as e:
+                logger.error(f"汇总数据失败: {e}")
+                check_step(False, f"汇总数据失败: {e}", should_continue=True)
 
             if Cfg().translator.engine:
                 inner_bar.set_description('翻译影片信息')
-                success = translate_movie_info(movie.info)
-                check_step(success)
+                success = False
+                try:
+                    success = translate_movie_info(movie.info)
+                    check_step(success, '翻译失败', should_continue=True)
+                except Exception as e:
+                    logger.error(f"翻译失败: {e}")
+                    check_step(False, f"翻译失败: {e}", should_continue=True)
 
-            generate_names(movie)
-            check_step(movie.save_dir, '无法按命名规则生成目标文件夹')
-            if not os.path.exists(movie.save_dir):
-                os.makedirs(movie.save_dir, exist_ok=True)
+            try:
+                generate_names(movie)
+                check_step(movie.save_dir, '无法按命名规则生成目标文件夹')
+                if not os.path.exists(movie.save_dir):
+                    os.makedirs(movie.save_dir, exist_ok=True)
+            except Exception as e:
+                logger.error(f"文件夹创建失败: {e}")
+                check_step(False, f"文件夹创建失败: {e}", should_continue=True)
 
             inner_bar.set_description('下载封面图片')
-            if Cfg().summarizer.cover.highres:
-                cover_dl = download_cover(movie.info.covers, movie.fanart_file, movie.info.big_covers)
-            else:
-                cover_dl = download_cover(movie.info.covers, movie.fanart_file)
-            check_step(cover_dl, '下载封面图片失败')
-            cover, pic_path = cover_dl
-            # 确保实际下载的封面的url与即将写入到movie.info中的一致
-            if cover != movie.info.cover:
-                movie.info.cover = cover
-            # 根据实际下载的封面的格式更新fanart/poster等图片的文件名
-            if pic_path != movie.fanart_file:
-                movie.fanart_file = pic_path
-                actual_ext = os.path.splitext(pic_path)[1]
-                movie.poster_file = os.path.splitext(movie.poster_file)[0] + actual_ext
+            try:
+                cover_dl = download_cover(movie.info.covers, movie.fanart_file,
+                                          movie.info.big_covers if Cfg().summarizer.cover.highres else None)
+                check_step(cover_dl, '下载封面图片失败')
+                cover, pic_path = cover_dl
+                if cover != movie.info.cover:
+                    movie.info.cover = cover
+                if pic_path != movie.fanart_file:
+                    movie.fanart_file = pic_path
+                    actual_ext = os.path.splitext(pic_path)[1]
+                    movie.poster_file = os.path.splitext(movie.poster_file)[0] + actual_ext
+            except Exception as e:
+                logger.error(f"封面下载失败: {e}")
+                check_step(False, f"封面下载失败: {e}", should_continue=True)
 
             process_poster(movie)
-
-            check_step(True)
+            check_step(True, '封面处理失败', should_continue=True)
 
             if Cfg().summarizer.extra_fanarts.enabled:
                 scrape_interval = Cfg().summarizer.extra_fanarts.scrap_interval.total_seconds()
                 inner_bar.set_description('下载剧照')
-                if movie.info.preview_pics:
-                    extrafanartdir = movie.save_dir + '/extrafanart'
-                    os.makedirs(extrafanartdir, exist_ok=True)
-                    for (id, pic_url) in enumerate(movie.info.preview_pics):
-                        inner_bar.set_description(f"Downloading extrafanart {id} from url: {pic_url}")
-                                                                                                                                
-                        fanart_destination = f"{extrafanartdir}/{id}.png"
-                        try:
-                            info = download(pic_url, fanart_destination)
-                            if valid_pic(fanart_destination):
-                                filesize = get_fmt_size(pic_path)
-                                width, height = get_pic_size(pic_path)
-                                elapsed = time.strftime("%M:%S", time.gmtime(info['elapsed']))
-                                speed = get_fmt_size(info['rate']) + '/s'
-                                logger.info(f"已下载剧照{pic_url} {id}.png: {width}x{height}, {filesize} [{elapsed}, {speed}]")
-                            else:
-                                check_step(False, f"下载剧照{id}: {pic_url}失败")
-                                continue
-                        except:
-                            check_step(False, f"下载剧照{id}: {pic_url}失败")
-                            continue
-                        time.sleep(scrape_interval)
-                check_step(True)
+                try:
+                    if movie.info.preview_pics:
+                        extrafanartdir = movie.save_dir + '/extrafanart'
+                        os.makedirs(extrafanartdir, exist_ok=True)
+                        for id, pic_url in enumerate(movie.info.preview_pics):
+                            inner_bar.set_description(f"Downloading extrafanart {id} from url: {pic_url}")
+                            fanart_destination = f"{extrafanartdir}/{id}.png"
+                            try:
+                                info = download(pic_url, fanart_destination)
+                                if valid_pic(fanart_destination):
+                                    filesize = get_fmt_size(pic_path)
+                                    width, height = get_pic_size(pic_path)
+                                    elapsed = time.strftime("%M:%S", time.gmtime(info['elapsed']))
+                                    speed = get_fmt_size(info['rate']) + '/s'
+                                    logger.info(
+                                        f"已下载剧照{pic_url} {id}.png: {width}x{height}, {filesize} [{elapsed}, {speed}]")
+                                else:
+                                    check_step(False, f"下载剧照{id}: {pic_url}失败", should_continue=True)
+                            except Exception as e:
+                                check_step(False, f"下载剧照{id}: {pic_url}失败", should_continue=True)
+                            time.sleep(scrape_interval)
+                except Exception as e:
+                    logger.error(f"下载剧照失败: {e}")
+                    check_step(False, f"下载剧照失败: {e}", should_continue=True)
 
             inner_bar.set_description('写入NFO')
-            write_nfo(movie.info, movie.nfo_file)
-            check_step(True)
+            try:
+                write_nfo(movie.info, movie.nfo_file)
+                check_step(True)
+            except Exception as e:
+                logger.error(f"写入NFO失败: {e}")
+                check_step(False, f"写入NFO失败: {e}", should_continue=True)
+
             if Cfg().summarizer.move_files:
                 inner_bar.set_description('移动影片文件')
-                movie.rename_files(Cfg().summarizer.path.hard_link)
-                check_step(True)
-                logger.info(f'整理完成，相关文件已保存到: {movie.save_dir}\n')
+                try:
+                    movie.rename_files(Cfg().summarizer.path.hard_link)
+                    check_step(True)
+                    logger.info(f'整理完成，相关文件已保存到: {movie.save_dir}\n')
+                except Exception as e:
+                    logger.error(f"移动影片文件失败: {e}")
+                    check_step(False, f"移动影片文件失败: {e}", should_continue=True)
             else:
                 logger.info(f'刮削完成，相关文件已保存到: {movie.nfo_file}\n')
 
             if movie != all_movies[-1] and Cfg().crawler.sleep_after_scraping > Duration(0):
                 time.sleep(Cfg().crawler.sleep_after_scraping.total_seconds())
             return_movies.append(movie)
-        # except Exception as e:
-        #     logger.debug(e, exc_info=True)
-        #     logger.error(f'整理失败: {e}')
+
         finally:
             inner_bar.close()
     return return_movies
