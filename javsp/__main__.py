@@ -475,13 +475,15 @@ def RunNormalMode(all_movies):
 
             inner_bar.set_description('汇总数据')
             has_required_keys = False
-            print(movie,"-------moviemoviemoviemoviemovie")
             try:
                 has_required_keys = info_summary(movie, all_info)
                 check_step(has_required_keys, '影片信息缺少必要字段', should_continue=True)
+                if not has_required_keys:
+                    continue
             except Exception as e:
                 logger.error(f"汇总数据失败: {e}")
                 check_step(False, f"汇总数据失败: {e}", should_continue=True)
+                continue
 
             if Cfg().translator.engine:
                 inner_bar.set_description('翻译影片信息')
@@ -489,18 +491,24 @@ def RunNormalMode(all_movies):
                 try:
                     success = translate_movie_info(movie.info)
                     check_step(success, '翻译失败', should_continue=True)
+                    if not success:
+                        continue
                 except Exception as e:
                     logger.error(f"翻译失败: {e}")
                     check_step(False, f"翻译失败: {e}", should_continue=True)
+                    continue
 
             try:
                 generate_names(movie)
                 check_step(movie.save_dir, '无法按命名规则生成目标文件夹')
+                if not movie.save_dir:
+                    continue
                 if not os.path.exists(movie.save_dir):
                     os.makedirs(movie.save_dir, exist_ok=True)
             except Exception as e:
                 logger.error(f"文件夹创建失败: {e}")
                 check_step(False, f"文件夹创建失败: {e}", should_continue=True)
+                continue
 
             inner_bar.set_description('下载封面图片')
             try:
@@ -517,6 +525,7 @@ def RunNormalMode(all_movies):
             except Exception as e:
                 logger.error(f"封面下载失败: {e}")
                 check_step(False, f"封面下载失败: {e}", should_continue=True)
+                continue
 
             process_poster(movie)
             check_step(True, '封面处理失败', should_continue=True)

@@ -145,7 +145,7 @@ summarizer:
 
   extra_fanarts:
     # 是否下载剧照？
-    enabled: true
+    enabled: False
     # 间隔的两次封面爬取请求之间应该间隔多久
     scrap_interval: PT1.5S
 
