@@ -462,12 +462,16 @@ def RunNormalMode(all_movies):
             all_info = None
             try:
                 all_info = parallel_crawler(movie, inner_bar)
+                if not all_info:
+                    check_step(False, f"并发任务失败: {e}", should_continue=True)
+                    continue
                 check_step(all_info,
                            f'为其配置的{len(Cfg().crawler.selection[movie.data_src])}个抓取器均未获取到影片信息',
                            should_continue=False)
             except Exception as e:
                 logger.error(f"并发任务失败: {e}")
                 check_step(False, f"并发任务失败: {e}", should_continue=True)
+                continue
 
             inner_bar.set_description('汇总数据')
             has_required_keys = False
