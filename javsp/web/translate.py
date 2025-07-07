@@ -129,6 +129,17 @@ def translate(texts, engine: Union[
                 err_msg = "{}: {}: {}".format(engine, result['error_code'], result['error_msg'])
         except Exception as e:
             err_msg = "{}: {}: Exception: {}".format(engine, -2, repr(e))
+    elif engine.name == 'googleai':
+        try:
+            result = googleai_translate(texts, engine.url, engine.api_key, engine.model)
+            if isinstance(result, str) and result:
+                rtn = {'trans': result, 'orig_break': [texts], 'trans_break': [result]}
+            elif isinstance(result, dict) and 'error_code' in result:
+                err_msg = "{}: {}: {}".format(engine, result['error_code'], result['error_msg'])
+            else:
+                err_msg = "{}: Unknown error: {}".format(engine, repr(result))
+        except Exception as e:
+            err_msg = "{}: -2: Exception: {}".format(engine, repr(e))
     else:
         return {'trans': texts}
 
@@ -206,7 +217,7 @@ def claude_translate(texts, api_key, to="zh_CN"):
     data = {
         "model": "claude-3-haiku-20240307",
         "system": f"Translate the following Japanese paragraph into {to}, while leaving non-Japanese text, names, or text that does not look like Japanese untranslated. Reply with the translated text only, do not add any text that is not in the original content.",
-        "max_tokens": 1024,
+        "max_completion_tokens": 1024,
         "messages": [{"role": "user", "content": texts}],
     }
     r = requests.post(api_url, headers=headers, json=data)
@@ -219,40 +230,203 @@ def claude_translate(texts, api_key, to="zh_CN"):
         }
     return result
 
-def openai_translate(texts, url: Url, api_key: str, model: str, to="zh_CN"):
-    """使用 OpenAI 翻译文本（默认翻译为简体中文）"""
+import requests
+
+def openai_translate(texts, url: str, api_key: str, model: str, to="zh_CN"):
+    """
+    兼容 OpenAI Chat API 和 Groq llama-3.1-70b-versatile 翻译接口的翻译函数
+    """
     api_url = str(url)
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}",
     }
     data = {
-         "messages": [
-           {
-             "role": "system",
-             "content": f"Translate the following Japanese paragraph into {to}, while leaving non-Japanese text, names, or text that does not look like Japanese untranslated. Reply with the translated text only, do not add any text that is not in the original content."
-           },
-           {
-             "role": "user",
-             "content": texts
-           }
-         ],
-         "model": model,
-         "temperature": 0,
-         "max_tokens": 1024,
-    }
-    r = requests.post(api_url, headers=headers, json=data)
-    if r.status_code == 200:
-        if 'error' in r.json():
-            result = {
-                "error_code": r.status_code,
-                "error_msg": r.json().get("error", {}).get("message", ""),
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    f"Translate the following Japanese paragraph into {to}, "
+                    "while leaving non-Japanese text, names, or text that does not look like Japanese untranslated. "
+                    "Reply with the translated text only, do not add any text that is not in the original content."
+                )
+            },
+            {
+                "role": "user",
+                "content": texts
             }
-        else:
-            result = r.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-    else:
-        result = {
-            "error_code": r.status_code,
-            "error_msg": r.reason,
+        ],
+        "temperature": 0,
+        "max_tokens": 1024,
+    }
+
+    try:
+        r = requests.post(api_url, headers=headers, json=data, timeout=15)
+        r.raise_for_status()
+        resp = r.json()
+
+        # OpenAI 标准返回格式
+        if "choices" in resp and len(resp["choices"]) > 0:
+            choice = resp["choices"][0]
+            # OpenAI 可能是 message.content
+            if "message" in choice and "content" in choice["message"]:
+                return choice["message"]["content"].strip()
+            # Groq llama 可能直接是 text 字段
+            elif "text" in choice:
+                return choice["text"].strip()
+
+        # 返回有 error 字段时
+        if "error" in resp:
+            return {
+                "error_code": r.status_code,
+                "error_msg": resp["error"].get("message", "")
+            }
+
+        # 无法解析，直接返回原始响应
+        return {
+            "error_code": -1,
+            "error_msg": f"Unexpected response format: {resp}"
         }
-    return result
+
+    except requests.exceptions.RequestException as e:
+        return {
+            "error_code": -1,
+            "error_msg": str(e),
+        }
+
+
+import requests
+
+def googleai_translate(texts, url: Url, api_key: str, model:str, to="zh_CN"):
+    """
+    使用 Google Gemini 翻译文本（默认翻译为简体中文）
+    仅翻译日文部分，保留非日文字符不变
+    """
+    api_url = f"{url}{model}:generateContent?key={api_key}"
+
+    headers = {
+        "Content-Type": "application/json"
+    }
+
+    system_prompt = (
+        f"Translate the following Japanese text into {to}. "
+        f"Do not translate any non-Japanese parts, such as English names or formatting. "
+        f"Reply with only the translated version of the original content."
+    )
+
+    data = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": system_prompt},
+                    {"text": texts}
+                ]
+            }
+        ]
+    }
+
+    try:
+        r = requests.post(api_url, headers=headers, json=data, timeout=10)
+        if r.status_code == 200:
+            result_json = r.json()
+            if "candidates" in result_json:
+                content = (
+                    result_json["candidates"][0]
+                    .get("content", {})
+                    .get("parts", [{}])[0]
+                    .get("text", "")
+                    .strip()
+                )
+                return content
+            else:
+                return {
+                    "error_code": r.status_code,
+                    "error_msg": "No candidates in response"
+                }
+        else:
+            return {
+                "error_code": r.status_code,
+                "error_msg": r.reason
+            }
+    except requests.exceptions.RequestException as e:
+        return {
+            "error_code": -1,
+            "error_msg": str(e)
+        }
+
+import requests
+
+def openai_translate(texts, url: str, api_key: str, model: str, to="zh_CN"):
+    """
+    兼容 OpenAI Chat API 和 Groq llama-3.1-70b-versatile 翻译接口的翻译函数
+    """
+    api_url = str(url)
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+    data = {
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    f"Translate the following Japanese paragraph into {to}, "
+                    "while leaving non-Japanese text, names, or text that does not look like Japanese untranslated. "
+                    "Reply with the translated text only, do not add any text that is not in the original content."
+                )
+            },
+            {
+                "role": "user",
+                "content": texts
+            }
+        ],
+        "temperature": 0,
+        "max_tokens": 1024,
+    }
+
+    try:
+        r = requests.post(api_url, headers=headers, json=data, timeout=15)
+        r.raise_for_status()
+        resp = r.json()
+
+        # OpenAI 标准返回格式
+        if "choices" in resp and len(resp["choices"]) > 0:
+            choice = resp["choices"][0]
+            if "message" in choice and "content" in choice["message"]:
+                return choice["message"]["content"].strip()
+            elif "text" in choice:
+                return choice["text"].strip()
+
+        if "error" in resp:
+            return {
+                "error_code": r.status_code,
+                "error_msg": resp["error"].get("message", "")
+            }
+
+        return {
+            "error_code": -1,
+            "error_msg": f"Unexpected response format: {resp}"
+        }
+
+    except requests.exceptions.RequestException as e:
+        return {
+            "error_code": -1,
+            "error_msg": str(e),
+        }
+
+
+if __name__ == "__main__":
+    text = "これは日本語の文章です。This should remain in English."
+    key = "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"
+    result = openai_translate(
+        texts=text,
+        url="https://api.groq.com/openai/v1/chat/completions",
+        api_key=key,
+        model="llama-3.3-70b-versatile"
+    )
+    print(result)
+
+
+

@@ -152,7 +152,13 @@ summarizer:
 translator:
   # 翻译引擎，可选: google, bing, baidu, claude(haiku), openai （Google可以直接免费使用。留空表示禁用翻译功能）
   # 进阶功能的文档 https://github.com/Yuukiy/JavSP/wiki/Translation-%7C-%E7%BF%BB%E8%AF%91
-  engine: null
+  engine:
+#    name: googleai
+#    # OpenAI API（默认使用 Groq，可替换成任何兼容 OpenAI 的第三方 API）
+#    url: 'https://generativelanguage.googleapis.com/v1beta/models/'
+#    api_key: 'AIzaSyC9pwY5PrX2iE_tcJJpegln8QGkO-XMwbM'
+#    # 要使用的模型（默认使用 Groq 的 llama-3.1-70b-versatile 模型，若使用 OpenAI 官方 API 的话一般模型为 gpt-3.5-turbo）
+#    model: 'gemini-2.0-flash'
   ## 使用百度翻译: {{{
   # engine: 
   #   name: baidu
@@ -173,13 +179,13 @@ translator:
   #   api_key: ''
   ## }}}
   ## 使用OpenAI翻译: {{{
-  # engine: 
-  #   name: openai
-  #   # OpenAI API（默认使用 Groq，可替换成任何兼容 OpenAI 的第三方 API）
-  #   url: 'https://api.groq.com/openai/v1/chat/completions'
-  #   api_key: ''
-  #   # 要使用的模型（默认使用 Groq 的 llama-3.1-70b-versatile 模型，若使用 OpenAI 官方 API 的话一般模型为 gpt-3.5-turbo）
-  #   model: llama-3.1-70b-versatile
+  # engine:
+     name: openai
+     # OpenAI API（默认使用 Groq，可替换成任何兼容 OpenAI 的第三方 API）
+     url: 'https://api.groq.com/openai/v1/chat/completions'
+     api_key: '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'
+     # 要使用的模型（默认使用 Groq 的 llama-3.1-70b-versatile 模型，若使用 OpenAI 官方 API 的话一般模型为 gpt-3.5-turbo）
+     model: 'llama-3.3-70b-versatile'
   ## }}}
   
   # 是否翻译各个字段
