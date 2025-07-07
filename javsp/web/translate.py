@@ -20,34 +20,46 @@ from javsp.web.base import read_proxy
 
 logger = logging.getLogger(__name__)
 
-
 def translate_movie_info(info: MovieInfo):
     """根据配置翻译影片信息"""
     # 翻译标题
     if info.title and Cfg().translator.fields.title and info.ori_title is None:
-        result = translate(info.title, Cfg().translator.engine, info.actress)
-        if 'trans' in result:
-            info.ori_title = info.title
-            info.title = result['trans']
-            # 如果有的话，附加断句信息
-            if 'orig_break' in result:
-                setattr(info, 'ori_title_break', result['orig_break'])
-            if 'trans_break' in result:
-                setattr(info, 'title_break', result['trans_break'])
-        else:
-            logger.error('翻译标题时出错: ' + result['error'])
+        try:
+            result = translate(info.title, Cfg().translator.engine, info.actress)
+            if result and 'trans' in result:
+                info.ori_title = info.title
+                info.title = result['trans']
+
+                # 如果有的话，附加断句信息
+                if 'orig_break' in result:
+                    setattr(info, 'ori_title_break', result['orig_break'])
+                if 'trans_break' in result:
+                    setattr(info, 'title_break', result['trans_break'])
+            else:
+                logger.error(f"翻译标题时出错: {result.get('error', '未知错误')}")
+                return False
+        except Exception as e:
+            logger.error(f"调用翻译服务时出错: {str(e)}")
             return False
+
     # 翻译简介
     if info.plot and Cfg().translator.fields.plot:
-        result = translate(info.plot, Cfg().translator.engine, info.actress)
-        if 'trans' in result:
-            # 只有翻译过plot的影片才可能需要ori_plot属性，因此在运行时动态添加，而不添加到类型定义里
-            setattr(info, 'ori_plot', info.plot)
-            info.plot = result['trans']
-        else:
-            logger.error('翻译简介时出错: ' + result['error'])
+        try:
+            result = translate(info.plot, Cfg().translator.engine, info.actress)
+            if result and 'trans' in result:
+                # 只有翻译过plot的影片才可能需要ori_plot属性
+                if not hasattr(info, 'ori_plot'):
+                    setattr(info, 'ori_plot', info.plot)
+                info.plot = result['trans']
+            else:
+                logger.error(f"翻译简介时出错: {result.get('error', '未知错误')}")
+                return False
+        except Exception as e:
+            logger.error(f"调用翻译服务时出错: {str(e)}")
             return False
+
     return True
+
 
 def translate(texts, engine: Union[
         BaiduTranslateEngine,
