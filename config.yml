@@ -34,7 +34,7 @@ network:
     javlib: 'https://www.x92g.com'
     missav: 'https://missav.ai/'
   # 网络问题导致抓取数据失败时的重试次数，通常3次就差不多了
-  retry: 3
+  retry: 1
   # https://en.wikipedia.org/wiki/ISO_8601#Durations
   timeout: PT10S
 
