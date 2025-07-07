@@ -414,6 +414,7 @@ def process_poster(movie: Movie):
                 return True
         return False
     crop_engine = None
+    print(movie.info,"movie.infomovie.infomovie.infomovie.info")
     if (movie.info.uncensored or
        movie.data_src == 'fc2' or
        should_use_ai_crop_match(movie.info.label.upper())):

@@ -145,6 +145,7 @@ def parse_data(movie: MovieInfo):
         raise MovieNotFoundError(__name__, movie.dvdid, ids)
     elif len(matches) > 1:
         raise MovieDuplicateError(__name__, movie.dvdid, len(matches))
+
     try:
         index = ids.index(target_id)
         new_url = movie_urls[index]
