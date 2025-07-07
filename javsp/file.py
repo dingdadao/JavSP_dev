@@ -153,7 +153,7 @@ def scan_movies(root: str) -> List[Movie]:
         logger.debug(f'影片数据源类型: {avid}: {src}')
         movies.append(mov)
         if not mov.info:
-            print(mov.info,files,"----------------------------------------")
+            print(mov.info,files,f"------------dvdid----{mov.dvdid}---------src--{src}-------------")
     return movies
 
 
