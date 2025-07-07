@@ -1,93 +1,138 @@
-![JavSP](./image/JavSP.svg)
 
-# Jav Scraper Package
 
-**汇总多站点数据的AV元数据刮削器**
+# Jav Scraper Package - Forked Version of JavSP
 
-提取影片文件名中的番号信息，自动抓取并汇总多个站点数据的 AV 元数据，按照指定的规则分类整理影片文件，并创建供 Emby、Jellyfin、Kodi 等软件使用的元数据文件
+**汇总多站点数据的 AV 元数据刮削器**
 
-**WebUI**: UI界面不是[此项目的目标](https://github.com/Yuukiy/JavSP/issues/148)。
+JavSP 是一个强大的工具，用于提取影片文件名中的番号信息，自动抓取并汇总多个站点数据的 AV 元数据。它会根据指定的规则分类整理影片文件，并为 Emby、Jellyfin、Kodi 等软件生成对应的元数据文件。
 
-**i18n**: This project currently supports only Chinese. However, if you're willing, you can [vote here](https://github.com/Yuukiy/JavSP/discussions/157) for the language you'd like to see added
-
-![License](https://img.shields.io/github/license/Yuukiy/JavSP)
-[![LICENSE](https://img.shields.io/badge/license-Anti%20996-blue.svg)](https://github.com/996icu/996.ICU/blob/master/LICENSE)
-![Python 3.10](https://img.shields.io/badge/python-3.10-green.svg)
-[![Crawlers test](https://img.shields.io/github/actions/workflow/status/Yuukiy/JavSP/test-web-funcs.yml?label=crawlers%20test)](https://github.com/Yuukiy/JavSP/actions/workflows/test-web-funcs.yml)
-[![Latest release](https://img.shields.io/github/v/release/Yuukiy/JavSP)](https://github.com/Yuukiy/JavSP/releases/latest)
-[![996.icu](https://img.shields.io/badge/link-996.icu-red.svg)](https://996.icu)
 ## 功能特点
 
-下面这些是一些已实现或待实现的功能，在逐渐实现和完善，如果想到新的功能点也会加进来。
+JavSP 提供了以下功能，有些已实现，有些正在开发中，欢迎提出新的功能需求：
 
-- [x] 自动识别影片番号
-- [x] 支持处理影片分片
-- [x] 汇总多个站点的数据生成NFO数据文件
-- [x] 每天自动对站点抓取器进行测试
-- [x] 多线程并行抓取
-- [x] 下载高清封面
-- [x] 基于AI人体分析裁剪素人等非常规封面的海报
-- [x] 自动检查和更新新版本
-- [x] 翻译标题和剧情简介
-- [ ] 匹配本地字幕
-- [ ] 使用小缩略图创建文件夹封面
-- [ ] 保持不同站点间 genre 分类的统一
-- [ ] 不同的运行模式（抓取数据+整理，仅抓取数据）
-- [ ] 可选：所有站点均抓取失败时由人工介入
+* [x] 自动识别影片番号
+* [x] 支持处理影片分片
+* [x] 汇总多个站点的数据并生成 NFO 数据文件
+* [x] 每天自动对站点抓取器进行测试
+* [x] 支持多线程并行抓取
+* [x] 下载高清封面
+* [x] 基于 AI 人体分析裁剪非常规封面
+* [x] 自动检查和更新新版本
+* [x] 翻译标题和剧情简介
+* [ ] 匹配本地字幕
+* [ ] 使用小缩略图创建文件夹封面
+* [ ] 保持不同站点之间的 genre 分类统一
+* [ ] 不同的运行模式（抓取数据+整理，仅抓取数据）
+* [ ] 可选：所有站点抓取失败时由人工介入
 
-## 迁移
+## 安装并运行
 
-功能修改日志：[ChangeLog](./CHANGELOG.md)
+### 从源代码运行
 
-如果你之前使用的是config.ini，请重新配置JavSP，或者通过[这个脚本](./tools/config_migration.py)来将其迁移到最新的config.yml。
+请确保您已经安装了 Poetry 构建系统：
 
-## [安装并运行JavSP](https://github.com/Yuukiy/JavSP/wiki/%E5%AE%89%E8%A3%85%E5%B9%B6%E8%BF%90%E8%A1%8CJavSP)
+```bash
+pipx install poetry
+poetry self add poetry-dynamic-versioning
+```
+
+然后，克隆此项目：
+
+```bash
+git clone https://github.com/dingdadao/JavSP_dev.git
+cd JavSP
+```
+
+使用 Poetry 构建并运行：
+
+```bash
+poetry install
+poetry run javsp
+```
 
 ## 使用
 
-软件开箱即用。如果想让软件更符合你的使用需求，也许你需要更改配置文件:
+JavSP 开箱即用。如果您希望自定义配置，可以修改 `config.yml` 文件，按需调整配置项。
 
-> 以任意文本编辑器打开 ```config.yml```，根据各个配置项的说明选择你需要的配置即可。
+此外，JavSP 也支持从命令行指定运行参数（命令行参数优先于配置文件）。使用以下命令查看支持的参数列表：
 
-此外软件也支持从命令行指定运行参数（命令行参数的优先级高于配置文件）。运行 ```JavSP -h``` 查看支持的参数列表
+```bash
+JavSP -h
+```
 
-更详细的使用说明请前往 [JavSP Wiki](https://github.com/Yuukiy/JavSP/wiki) 查看
+### 命名规则
 
-如果使用的时候遇到问题也欢迎给我反馈😊
+在 `config.yml` 配置文件中的 `NamingRule` 下：
 
-## 问题反馈
+* **`save_dir`**：存放影片、封面和 NFO 数据文件等的文件夹路径。
+* **`filename`**：影片、封面和 NFO 数据文件等的文件名。
 
-如果使用中遇到了 Bug，请[前往 Issue 区反馈](https://github.com/Yuukiy/JavSP/issues)（提问前请先搜索是否已有类似问题）
+这两个字段支持使用变量，举例如下：
 
+```yaml
+[NamingRule]
+save_dir = $actress/[$num] $title
+filename = $num
+```
 
-## 参与贡献
+### 支持的变量
 
-此项目不需要捐赠。如果你想要帮助改进这个项目，欢迎通过以下方式参与进来（并不仅局限于代码）：
+| 变量           | 含义    | 默认值                  | 备注                             |
+| ------------ | ----- | -------------------- | ------------------------------ |
+| `$num`       | 影片番号  |                      | 优先使用 DVD ID，当工作在 cid 模式下则为 cid |
+| `$title`     | 影片标题  | `null_for_title`     |                                |
+| `$rawtitle`  | 原始标题  | `$title`             | 无论是否启用翻译功能，始终为翻译前的原始标题         |
+| `$actress`   | 女优    | `null_for_actress`   | 多个女优用逗号分隔                      |
+| `$censor`    | 有码/无码 |                      | 有三种状态：已知有码/已知无码/不确定            |
+| `$score`     | 影片评分  | 0                    | 10分制，例如：7.81                   |
+| `$serial`    | 系列    | `null_for_serial`    |                                |
+| `$label`     | 番号系列  | ---                  | 将番号拆分后得到的系列                    |
+| `$director`  | 导演    | `null_for_director`  |                                |
+| `$producer`  | 制作商   | `null_for_producer`  |                                |
+| `$publisher` | 发行商   | `null_for_publisher` |                                |
+| `$date`      | 发行日期  | `0000-00-00`         | 例如：2020-05-20                  |
+| `$year`      | 发行年份  | `0000`               |                                |
 
-- 帮助撰写和改进Wiki
+### 示例配置
 
-- 帮助完善单元测试数据（不必非要写代码，例如如果你发现有某系列的番号识别不准确，总结一下提issue也是很好的）
+如果你希望将有码和无码影片整理到不同文件夹：
 
-- 帮助翻译 genre
+```yaml
+save_dir = $censor/$actress/[$num]
+```
 
-- Bugfix / 新功能？欢迎发 Pull Request
+### 注意事项
 
-- 要不考虑点个 Star ?（我会很开心的）
+* 如果在使用 `nfo` 文件时，不建议在命名规则中添加 `$title`（标题），因为它可能会影响媒体管理软件的兼容性，尤其是 Linux 文件系统对长路径的支持有限。
+* 对于仅在 Windows 上使用时，添加标题字段 `$title` 可能更加方便。
 
+---
 
-## 许可
+### 项目许可
 
-此项目的所有权利与许可受 GPL-3.0 License 与 [Anti 996 License](https://github.com/996icu/996.ICU/blob/master/LICENSE_CN) 共同限制。此外，如果你使用此项目，表明你还额外接受以下条款：
+本项目遵循 [GPL-3.0 License](https://opensource.org/licenses/GPL-3.0) 和 [Anti 996 License](https://github.com/996icu/996.ICU/blob/master/LICENSE_CN) 共同许可。
 
-- 本软件仅供学习 Python 和技术交流使用
+### 使用条款
 
-- 请勿在微博、微信等墙内的公共社交平台上宣传此项目
+* 本软件仅供学习 Python 和技术交流使用。
+* 请勿在微博、微信等墙内社交平台上宣传此项目。
+* 使用本软件时，请遵守当地法律法规。
+* 禁止将本软件用于商业用途。
 
-- 用户在使用本软件时，请遵守当地法律法规
+---
 
-- 禁止将本软件用于商业用途
+### Star 贡献
+
 
 
 ---
 
-![Star History Chart](https://api.star-history.com/svg?repos=Yuukiy/JavSP&type=Date)
+**优化迭代：**
+
+1. **简化命名规则描述：** 我对命名规则和变量支持部分进行了简化，去掉了一些多余的内容，使其更加易读。
+2. **清晰的安装和使用流程：** 将安装和运行的步骤更加清晰地描述，帮助用户顺利启动项目。
+3. **添加许可和使用条款：** 明确项目的许可协议及使用条款，增加法律合规性。
+
+---
+
+
