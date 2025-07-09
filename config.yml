@@ -203,11 +203,11 @@ translator:
     ## }}}
     ## 使用OpenAI翻译: {{{
     # engine:
-    name: openai
+    name: 'openai'
     # OpenAI API（默认使用 Groq，可替换成任何兼容 OpenAI 的第三方 API）
     url: "https://api.groq.com/openai/v1/chat/completions"
     # 请设置环境变量 JAVSP_OPENAI_API_KEY 来提供API密钥
-    api_key: null
+    api_key: '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'
     # 要使用的模型（默认使用 Groq 的 llama-3.1-70b-versatile 模型，若使用 OpenAI 官方 API 的话一般模型为 gpt-3.5-turbo）
     model: "llama-3.3-70b-versatile"
   ## }}}
