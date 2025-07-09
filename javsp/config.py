@@ -1,11 +1,12 @@
 from argparse import ArgumentParser, RawTextHelpFormatter
 from enum import Enum
-from typing import Dict, List, Literal, TypeAlias, Union
+from typing import Dict, List, Literal, TypeAlias, Union, Optional
 from confz import BaseConfig, CLArgSource, EnvSource, FileSource
 from pydantic import ByteSize, Field, NonNegativeInt, PositiveInt
 from pydantic_extra_types.pendulum_dt import Duration
 from pydantic_core import Url
 from pathlib import Path
+import os
 
 from javsp.lib import resource_path
 
@@ -210,6 +211,20 @@ class TranslateField(BaseConfig):
 class Translator(BaseConfig):
     engine: TranslateEngine = Field(..., discriminator='name')
     fields: TranslateField
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        # 从环境变量读取API密钥
+        if self.engine and self.engine.api_key is None:
+            if self.engine.name == 'openai':
+                self.engine.api_key = os.getenv('JAVSP_OPENAI_API_KEY')
+            elif self.engine.name == 'baidu':
+                self.engine.app_id = os.getenv('JAVSP_BAIDU_APP_ID')
+                self.engine.api_key = os.getenv('JAVSP_BAIDU_API_KEY')
+            elif self.engine.name == 'bing':
+                self.engine.api_key = os.getenv('JAVSP_BING_API_KEY')
+            elif self.engine.name == 'claude':
+                self.engine.api_key = os.getenv('JAVSP_CLAUDE_API_KEY')
 
 class Other(BaseConfig):
     interactive: bool

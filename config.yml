@@ -1,21 +1,43 @@
-# vim:foldmethod=marker 
+# vim:foldmethod=marker
 ################################
 scanner:
   # 推测番号前忽略文件名中的特定字符串（忽略大小写，以英文分号;分隔）
   # 大多数情况软件能够自动识别番号，只有当文件名中特定的部分导致番号识别错误时才需要更新此设置
   # 要忽略的正则表达式（如果你不熟悉正则表达式，请不要修改此配置，否则可能严重影响番号识别效果）
   ignored_id_pattern:
-    - '(144|240|360|480|720|1080)[Pp]'
-    - '[24][Kk]'
+    - "(144|240|360|480|720|1080)[Pp]"
+    - "[24][Kk]"
     - '\w+2048\.com'
-    - 'Carib(beancom)?'
+    - "Carib(beancom)?"
     - '[^a-z\d](f?hd|lt)[^a-z\d]'
   # 整理哪个文件夹下的影片？（此项留空时将在运行时询问）
-  input_directory: '/volume1/Media/actress/'
+  input_directory: "/volume1/Media/actress/"
   # 哪些后缀的文件应当视为影片？
-  filename_extensions: [.3gp, .avi, .f4v, .flv, .iso, .m2ts, .m4v, .mkv, .mov, .mp4, .mpeg, .rm, .rmvb, .ts, .vob, .webm, .wmv, .strm, .mpg]
+  filename_extensions:
+    [
+      .3gp,
+      .avi,
+      .f4v,
+      .flv,
+      .iso,
+      .m2ts,
+      .m4v,
+      .mkv,
+      .mov,
+      .mp4,
+      .mpeg,
+      .rm,
+      .rmvb,
+      .ts,
+      .vob,
+      .webm,
+      .wmv,
+      .strm,
+      .mpg,
+    ]
   # 扫描影片文件时忽略指定的文件夹
-  ignored_folder_name_pattern: ['^\.', '^#recycle$', '^#整理完成$', '^#不要扫描$']
+  ignored_folder_name_pattern:
+    ['^\.', "^#recycle$", "^#整理完成$", "^#不要扫描$"]
   # 匹配番号时忽略小于指定大小的文件
   # 格式要求：https://docs.pydantic.dev/2.0/usage/types/bytesize/
   minimum_size: 300MiB
@@ -28,11 +50,11 @@ network:
   proxy_server: null
   # 各个站点的免代理地址。地址失效时软件会自动尝试获取新地址，你也可以手动设置
   proxy_free:
-    avsox: 'https://avsox.click'
-    javbus: 'https://www.buscdn.ink/'
-    javdb: 'https://javdb459.com/'
-    javlib: 'https://www.x92g.com'
-    missav: 'https://missav.ai/'
+    avsox: "https://avsox.click"
+    javbus: "https://www.buscdn.ink/"
+    javdb: "https://javdb459.com/"
+    javlib: "https://www.x92g.com"
+    missav: "https://missav.ai/"
   # 网络问题导致抓取数据失败时的重试次数，通常3次就差不多了
   retry: 1
   # https://en.wikipedia.org/wiki/ISO_8601#Durations
@@ -74,11 +96,11 @@ summarizer:
   move_files: true
 
   # 路径相关的选项
-  path: 
+  path:
     # 存放影片、封面等文件的文件夹路径
-    output_folder_pattern: '/volume1/Media/actresses/{actress}/[{num}] {title}'
+    output_folder_pattern: "/volume1/Media/actresses/{actress}/[{num}] {title}"
     # 影片、封面、nfo信息文件等的文件名将基于下面的规则来创建
-    basename_pattern: '{num}'
+    basename_pattern: "{num}"
     # 允许的最长文件路径（路径过长时将据此自动截短标题）
     length_maximum: 250
     # 是否以字节数来计算文件路径长度
@@ -95,25 +117,25 @@ summarizer:
 
   # 下面这些项用来设置对应变量为空时的替代信息
   default:
-    title: '#未知标题'
-    actress: '#未知女优'
-    series: '#未知系列'
-    director: '#未知导演'
-    producer: '#未知制作商'
-    publisher: '#未知发行商'
+    title: "#未知标题"
+    actress: "#未知女优"
+    series: "#未知系列"
+    director: "#未知导演"
+    producer: "#未知制作商"
+    publisher: "#未知发行商"
 
   # NFO文件生成相关的选项
   nfo:
     # nfo文件的名称
     basename_pattern: "movie"
     # nfo文件中的影片标题（即媒体管理工具中显示的标题）
-    title_pattern: '{title} {num}'
+    title_pattern: "{title} {num}"
     # 要添加到自定义分类的字段，空列表表示不添加
-    custom_genres_fields: ['{genre}', '{censor}']
+    custom_genres_fields: ["{genre}", "{censor}"]
     # 要添加到自定义标签的字段，空列表表示不添加
-    custom_tags_fields: ['{genre}', '{censor}']
+    custom_tags_fields: ["{genre}", "{censor}"]
   # 依次设置 已知无码/已知有码/不确定 这三种情况下 {censor} 对应的文本(可以利用此变量将有码/无码影片整理到不同文件夹)
-  censor_options_representation: ['无码', '有码', '打码情况未知']
+  censor_options_representation: ["无码", "有码", "打码情况未知"]
 
   cover:
     # 封面文件的名称（不含拓展名），可以使用如`{title}`等字段
@@ -126,16 +148,16 @@ summarizer:
       # 要使用图像识别来裁剪的番号系列需要匹配的正则表达式
       on_id_pattern:
         - '^\d{6}[-_]\d{3}$'
-        - '^ARA'
-        - '^SIRO'
-        - '^GANA'
-        - '^MIUM'
-        - '^HHL'
+        - "^ARA"
+        - "^SIRO"
+        - "^GANA"
+        - "^MIUM"
+        - "^HHL"
       # 要使用的图像识别引擎，详细配置见文档 https://github.com/Yuukiy/JavSP/wiki/AI-%7C-%E4%BA%BA%E8%84%B8%E8%AF%86%E5%88%AB
       # NOTE: 此处无法直接对应，请参照注释手动填入
       engine: null # null表示禁用图像剪裁
       ## 使用Slimeface: {{{
-      # engine: 
+      # engine:
       #   name: slimeface
       ## }}}
 
@@ -154,48 +176,49 @@ translator:
   # 翻译引擎，可选: google, bing, baidu, claude(haiku), openai （Google可以直接免费使用。留空表示禁用翻译功能）
   # 进阶功能的文档 https://github.com/Yuukiy/JavSP/wiki/Translation-%7C-%E7%BF%BB%E8%AF%91
   engine:
-#    name: googleai
-#    # OpenAI API（默认使用 Groq，可替换成任何兼容 OpenAI 的第三方 API）
-#    url: 'https://generativelanguage.googleapis.com/v1beta/models/'
-#    api_key: 'AIzaSyC9pwY5PrX2iE_tcJJpegln8QGkO-XMwbM'
-#    # 要使用的模型（默认使用 Groq 的 llama-3.1-70b-versatile 模型，若使用 OpenAI 官方 API 的话一般模型为 gpt-3.5-turbo）
-#    model: 'gemini-2.0-flash'
-  ## 使用百度翻译: {{{
-  # engine: 
-  #   name: baidu
-  #   # 百度翻译的APP ID和密钥
-  #   app_id: ''
-  #   api_key: ''
+    #    name: googleai
+    #    # OpenAI API（默认使用 Groq，可替换成任何兼容 OpenAI 的第三方 API）
+    #    url: 'https://generativelanguage.googleapis.com/v1beta/models/'
+    #    api_key: 'AIzaSyC9pwY5PrX2iE_tcJJpegln8QGkO-XMwbM'
+    #    # 要使用的模型（默认使用 Groq 的 llama-3.1-70b-versatile 模型，若使用 OpenAI 官方 API 的话一般模型为 gpt-3.5-turbo）
+    #    model: 'gemini-2.0-flash'
+    ## 使用百度翻译: {{{
+    # engine:
+    #   name: baidu
+    #   # 百度翻译的APP ID和密钥
+    #   app_id: ''
+    #   api_key: ''
+    ## }}}
+    ## 使用必应翻译: {{{
+    # engine:
+    #   name: bing
+    #   # 微软必应翻译（Azure 认知服务 → 翻译）的密钥
+    #   api_key: ''
+    ## }}}
+    ## 使用Claude翻译: {{{
+    # engine:
+    #   name: claude
+    #   # Claude的密钥 (使用haiku模型)
+    #   api_key: ''
+    ## }}}
+    ## 使用OpenAI翻译: {{{
+    # engine:
+    name: openai
+    # OpenAI API（默认使用 Groq，可替换成任何兼容 OpenAI 的第三方 API）
+    url: "https://api.groq.com/openai/v1/chat/completions"
+    # 请设置环境变量 JAVSP_OPENAI_API_KEY 来提供API密钥
+    api_key: null
+    # 要使用的模型（默认使用 Groq 的 llama-3.1-70b-versatile 模型，若使用 OpenAI 官方 API 的话一般模型为 gpt-3.5-turbo）
+    model: "llama-3.3-70b-versatile"
   ## }}}
-  ## 使用必应翻译: {{{
-  # engine: 
-  #   name: bing
-  #   # 微软必应翻译（Azure 认知服务 → 翻译）的密钥
-  #   api_key: ''
-  ## }}}
-  ## 使用Claude翻译: {{{
-  # engine: 
-  #   name: claude
-  #   # Claude的密钥 (使用haiku模型)
-  #   api_key: ''
-  ## }}}
-  ## 使用OpenAI翻译: {{{
-  # engine:
-     name: openai
-     # OpenAI API（默认使用 Groq，可替换成任何兼容 OpenAI 的第三方 API）
-     url: 'https://api.groq.com/openai/v1/chat/completions'
-     api_key: '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'
-     # 要使用的模型（默认使用 Groq 的 llama-3.1-70b-versatile 模型，若使用 OpenAI 官方 API 的话一般模型为 gpt-3.5-turbo）
-     model: 'llama-3.3-70b-versatile'
-  ## }}}
-  
+
   # 是否翻译各个字段
-  fields: 
+  fields:
     # 是否翻译标题
     title: true
     # 是否翻译剧情简介
     plot: true
-  
+
 ################################
 other:
   # 是否在stdin/stdout进行交互
