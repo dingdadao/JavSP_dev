@@ -208,7 +208,7 @@ def protect_names(texts, names):
 
 def bing_translate(texts, api_key, to='zh-Hans', max_retry=3):
     """使用 Bing 翻译文本（默认翻译为简体中文），失败自动重试"""
-    api_url = "https://api-apc.cognitive.microsofttranslator.com"
+    api_url = "https://api.cognitive.microsofttranslator.com/translate"
     params = {'api-version': '3.0', 'to': to, 'includeSentenceLength': True}
     headers = {
         'Ocp-Apim-Subscription-Key': api_key,
