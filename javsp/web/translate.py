@@ -1,7 +1,7 @@
 """网页翻译接口"""
 # 由于翻译服务不走代理，而且需要自己的错误处理机制，因此不通过base.py来管理网络请求
 import time
-from typing import Union
+from typing import Union, re
 import uuid
 import random
 import logging
@@ -87,27 +87,40 @@ def translate(texts, engine: Union[
         else:
             err_msg = "{}: {}: {}".format(engine, result['error_code'], result['error_msg'])
     elif engine.name == 'bing':
-        # 使用动态词典保护原文中的女优名，防止翻译后认不出来
-        for i in actress:
-            texts = texts.replace(i, f'<mstrans:dictionary translation="{i}">{i}</mstrans:dictionary>')
-        result = bing_translate(texts, api_key=engine.api_key)
-        if 'error' not in result:
-            sentLen = result[0]['translations'][0]['sentLen']
+        """主逻辑：使用 Bing 翻译，并对文本分句处理"""
+        texts = protect_names(texts, actress)
+        result = bing_translate(texts, api_key=api_key)
+
+        if not result:
+            print("翻译失败，返回为空")
+            return None
+        if isinstance(result, dict) and 'error' in result:
+            print("翻译失败，错误信息:", result['error'])
+            return None
+        if not isinstance(result, list):
+            print("翻译返回结构异常:", result)
+            return None
+
+        try:
+            translation = result[0]['translations'][0]
+            sentLen = translation.get('sentLen')
             orig_break, trans_break = [], []
-            # 对原文进行断句
+
+            # 拆分原文
             remaining = texts
             for i in sentLen['srcSentLen']:
                 orig_break.append(remaining[:i])
                 remaining = remaining[i:]
-            # 对译文进行断句
-            remaining = result[0]['translations'][0]['text']
+
+            # 拆分译文（去除结尾空格）
+            remaining = translation['text']
             for i in sentLen['transSentLen']:
-                # Bing会在译文的每个句尾添加一个空格，这并不符合中文的标点习惯，所以去掉这个空格
                 trans_break.append(remaining[:i].rstrip(' '))
                 remaining = remaining[i:]
+
             trans = ''.join(trans_break)
-            rtn = {'trans': trans, 'orig_break': orig_break, 'trans_break': trans_break}
-        else:
+            return {'trans': trans, 'orig_break': orig_break, 'trans_break': trans_break}
+        except Exception as e:
             err_msg = "{}: {}: {}".format(engine, result['error']['code'], result['error']['message'])
     elif engine.name == 'claude':
         try:
@@ -179,9 +192,16 @@ def baidu_translate(texts, app_id, api_key, to='zh'):
     baidu_translate._last_access = time.perf_counter()
     return result
 
+def protect_names(texts, names):
+    """将女优名用 <mstrans:dictionary> 包裹防止翻译"""
+    def repl(m):
+        name = m.group(0)
+        return f'<mstrans:dictionary translation="{name}">{name}</mstrans:dictionary>'
+    pattern = '|'.join(re.escape(name) for name in sorted(names, key=len, reverse=True))
+    return re.sub(pattern, repl, texts)
 
-def bing_translate(texts, api_key, to='zh-Hans'):
-    """使用Bing翻译文本（默认翻译为简体中文）"""
+def bing_translate(texts, api_key, to='zh-Hans', max_retry=3):
+    """使用 Bing 翻译文本（默认翻译为简体中文），失败自动重试"""
     api_url = "https://api.cognitive.microsofttranslator.com/translate"
     params = {'api-version': '3.0', 'to': to, 'includeSentenceLength': True}
     headers = {
@@ -191,9 +211,21 @@ def bing_translate(texts, api_key, to='zh-Hans'):
         'X-ClientTraceId': str(uuid.uuid4())
     }
     body = [{'text': texts}]
-    r = requests.post(api_url, params=params, headers=headers, json=body)
-    result = r.json()
-    return result
+
+    for attempt in range(1, max_retry + 1):
+        try:
+            r = requests.post(api_url, params=params, headers=headers, json=body, timeout=10)
+            r.raise_for_status()
+            result = r.json()
+            print(f"[Bing翻译第 {attempt} 次成功] 响应内容: {result}")
+            return result
+        except Exception as e:
+            print(f"[Bing翻译第 {attempt} 次失败] 错误: {e}")
+            if attempt < max_retry:
+                time.sleep(2)
+            else:
+                print("[Bing翻译] 已达到最大重试次数，返回 None")
+                return None
 
 
 _google_trans_wait = 60
