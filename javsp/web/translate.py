@@ -125,7 +125,7 @@ def translate(texts, engine: Union[
                 remaining = remaining[i:]
 
             trans = ''.join(trans_break)
-            return {'trans': trans, 'orig_break': orig_break, 'trans_break': trans_break}
+            rtn = {'trans': trans, 'orig_break': orig_break, 'trans_break': trans_break}
         except Exception as e:
             err_msg = "{}: {}: {}".format(engine, result['error']['code'], result['error']['message'])
     elif engine.name == 'claude':
