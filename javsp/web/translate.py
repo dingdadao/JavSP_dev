@@ -89,17 +89,23 @@ def translate(texts, engine: Union[
     elif engine.name == 'bing':
         """主逻辑：使用 Bing 翻译，并对文本分句处理"""
         texts = protect_names(texts, actress)
-        result = bing_translate(texts, api_key=api_key)
+        result = bing_translate(texts, api_key=engine.api_key)
 
         if not result:
-            print("翻译失败，返回为空")
-            return None
+            err_msg = f"{engine.name}: None response from Bing API"
+            return {"success": False, "err_msg": err_msg}
+
+            # API 返回错误
         if isinstance(result, dict) and 'error' in result:
-            print("翻译失败，错误信息:", result['error'])
-            return None
+            error_code = result['error'].get('code', 'UnknownCode')
+            error_msg = result['error'].get('message', 'UnknownMessage')
+            err_msg = f"{engine.name}: {error_code}: {error_msg}"
+            return {"success": False, "err_msg": err_msg}
+
+            # 格式错误
         if not isinstance(result, list):
-            print("翻译返回结构异常:", result)
-            return None
+            err_msg = f"{engine.name}: Unexpected response format: {result}"
+            return {"success": False, "err_msg": err_msg}
 
         try:
             translation = result[0]['translations'][0]
