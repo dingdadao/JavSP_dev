@@ -184,16 +184,16 @@ translator:
     #    model: 'gemini-2.0-flash'
     ## 使用百度翻译: {{{
     # engine:
-    #   name: baidu
-    #   # 百度翻译的APP ID和密钥
-    #   app_id: ''
-    #   api_key: ''
+#       name: baidu
+#       # 百度翻译的APP ID和密钥
+#       app_id: '20240419002029224'
+#       api_key: '8bDJ1cWtusTN7ddZXkJw'
     ## }}}
     ## 使用必应翻译: {{{
     # engine:
-    #   name: bing
-    #   # 微软必应翻译（Azure 认知服务 → 翻译）的密钥
-    #   api_key: ''
+       name: bing
+       # 微软必应翻译（Azure 认知服务 → 翻译）的密钥
+       api_key: '5p2dUQeLCZVaUEOK821GTrnuxtHpEQA2mEx4odyS0o3zsIhihsl7JQQJ99BGACULyCpXJ3w3AAAbACOGIAF8'
     ## }}}
     ## 使用Claude翻译: {{{
     # engine:
@@ -203,13 +203,13 @@ translator:
     ## }}}
     ## 使用OpenAI翻译: {{{
     # engine:
-    name: 'openai'
-    # OpenAI API（默认使用 Groq，可替换成任何兼容 OpenAI 的第三方 API）
-    url: "https://api.groq.com/openai/v1/chat/completions"
-    # 请设置环境变量 JAVSP_OPENAI_API_KEY 来提供API密钥
-    api_key: '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'
-    # 要使用的模型（默认使用 Groq 的 llama-3.1-70b-versatile 模型，若使用 OpenAI 官方 API 的话一般模型为 gpt-3.5-turbo）
-    model: "llama-3.3-70b-versatile"
+#    name: 'openai'
+#    # OpenAI API（默认使用 Groq，可替换成任何兼容 OpenAI 的第三方 API）
+#    url: "https://api.groq.com/openai/v1/chat/completions"
+#    # 请设置环境变量 JAVSP_OPENAI_API_KEY 来提供API密钥
+#    api_key: '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'
+#    # 要使用的模型（默认使用 Groq 的 llama-3.1-70b-versatile 模型，若使用 OpenAI 官方 API 的话一般模型为 gpt-3.5-turbo）
+#    model: "llama-3.3-70b-versatile"
   ## }}}
 
   # 是否翻译各个字段
