@@ -1,12 +1,12 @@
 """网页翻译接口"""
 # 由于翻译服务不走代理，而且需要自己的错误处理机制，因此不通过base.py来管理网络请求
 import time
-from typing import Union, re
+from typing import Union
+import re
 import uuid
 import random
 import logging
 from pydantic_core import Url
-import requests
 from hashlib import md5
 
 
