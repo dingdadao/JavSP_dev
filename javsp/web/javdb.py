@@ -81,7 +81,7 @@ def get_html_wrapper(url):
         response = request.get(url)
         # print(response.text)
     except Exception as e:
-        logger.error(f"请求失败: {url}，错误: {e}", exc_info=True)
+        logger.error(f"请求失败: {url}，错误: {e}")
         raise
 
     # 登录重定向检测
@@ -96,7 +96,7 @@ def get_html_wrapper(url):
         html = resp2html(response)
         return html
     except Exception as e:
-        logger.error(f"HTML 解析失败: {e}", exc_info=True)
+        logger.error(f"HTML 解析失败: {e}")
         raise
 
 
@@ -107,7 +107,7 @@ def get_user_info(site, cookies):
         request.cookies = cookies
         html = request.get_html(f'https://{site}/users/profile')
     except Exception as e:
-        logger.info('获取用户信息时出错', exc_info=True)
+        logger.info('获取用户信息时出错')
         return None
 
     if 'JavDB' in html.text:
