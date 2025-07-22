@@ -11,7 +11,7 @@ scanner:
     - "Carib(beancom)?"
     - '[^a-z\d](f?hd|lt)[^a-z\d]'
   # 整理哪个文件夹下的影片？（此项留空时将在运行时询问）
-  input_directory: "/volume1/Media/actress/"
+  input_directory: "/volume1/Media/Download/"
   # 哪些后缀的文件应当视为影片？
   filename_extensions:
     [
