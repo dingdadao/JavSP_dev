@@ -80,7 +80,7 @@ def translate(texts, engine: Union[
     rtn = {}
     err_msg = ''
     if engine.name == 'baidu':
-        result = baidu_translate(texts, engine.app_id, engine.api_key)
+        result = baidu_translate(texts=texts, app_id=engine.app_id, api_key=engine.api_key)
         if 'error_code' not in result:
             # 百度翻译的结果中的组表示的是按换行符分隔的不同段落，而不是句子
             paragraphs = [i['dst'] for i in result['trans_result']]
@@ -194,7 +194,8 @@ def baidu_translate(texts, app_id, api_key, to='zh'):
 
     payload = json.dumps({
         "from": "jp",
-        "to": to
+        "to": to,
+        "q":texts
     }, ensure_ascii=False)
     headers = {
         'Accept': 'application/json'
@@ -476,11 +477,11 @@ def openai_translate(texts, url: str, api_key: str, model: str, to="zh_CN"):
 if __name__ == "__main__":
     text = "これは日本語の文章です。This should remain in English."
     key = "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"
-    result = openai_translate(
+    result = baidu_translate(
         texts=text,
-        url="https://api.groq.com/openai/v1/chat/completions",
-        api_key=key,
-        model="llama-3.3-70b-versatile"
+        api_key = "xlknIh8NbZiq7ksRBhDpySDGUdmCWAUq",
+        app_id = "1BKABrHJdBrLtJtxQvlyYi7r"
+
     )
     print(result)
 
