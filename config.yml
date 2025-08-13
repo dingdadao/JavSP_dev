@@ -186,8 +186,8 @@ translator:
     # engine:
        name: baidu
 #       # 百度翻译的APP ID和密钥
-       app_id: 'jP7Bhh4PoKjyCQGx1byKfl0X'
-       api_key: 'dkfFAwIjmP5RnTscpmsPEQXIhGKMku6c'
+       app_id: '1BKABrHJdBrLtJtxQvlyYi7r'
+       api_key: 'xlknIh8NbZiq7ksRBhDpySDGUdmCWAUq'
     ## }}}
     ## 使用必应翻译: {{{
     # engine:

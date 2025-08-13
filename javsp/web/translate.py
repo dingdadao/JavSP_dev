@@ -81,6 +81,7 @@ def translate(texts, engine: Union[
     err_msg = ''
     if engine.name == 'baidu':
         result = baidu_translate(texts=texts, app_id=engine.app_id, api_key=engine.api_key)
+        logging
         if 'error_code' not in result:
             # 百度翻译的结果中的组表示的是按换行符分隔的不同段落，而不是句子
             paragraphs = [i['dst'] for i in result['trans_result']]
