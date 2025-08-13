@@ -1,4 +1,5 @@
 """网页翻译接口"""
+import json
 # 由于翻译服务不走代理，而且需要自己的错误处理机制，因此不通过base.py来管理网络请求
 import time
 from typing import Union
@@ -179,24 +180,29 @@ def translate(texts, engine: Union[
 
     return rtn
 
+def get_access_token(API_KEY, SECRET_KEY):
+    """
+    使用 AK，SK 生成鉴权签名（Access Token）
+    :return: access_token，或是None(如果错误)
+    """
+    url = "https://aip.baidubce.com/oauth/2.0/token"
+    params = {"grant_type": "client_credentials", "client_id": API_KEY, "client_secret": SECRET_KEY}
+    return str(requests.post(url, params=params).json().get("access_token"))
+
 def baidu_translate(texts, app_id, api_key, to='zh'):
-    """使用百度翻译文本（默认翻译为简体中文）"""
-    api_url = "https://api.fanyi.baidu.com/api/trans/vip/translate"
-    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-    salt = random.randint(0, 0x7FFFFFFF)
-    sign_input = app_id + texts + str(salt) + api_key
-    sign = md5(sign_input.encode('utf-8')).hexdigest()
-    payload = {'appid': app_id, 'q': texts, 'from': 'auto', 'to': to, 'salt': salt, 'sign': sign}
-    # 由于百度标准版限制QPS为1，连续翻译标题和简介会超限，因此需要添加延时
-    now = time.perf_counter()
-    last_access = getattr(baidu_translate, '_last_access', -1)
-    wait = 1.0 - (now - last_access)
-    if wait > 0:
-        time.sleep(wait)
-    r = requests.post(api_url, params=payload, headers=headers)
-    result = r.json()
-    baidu_translate._last_access = time.perf_counter()
-    return result
+    url = "https://aip.baidubce.com/rpc/2.0/mt/texttrans/v1?access_token=" + get_access_token(app_id, api_key)
+
+    payload = json.dumps({
+        "from": "jp",
+        "to": to
+    }, ensure_ascii=False)
+    headers = {
+        'Accept': 'application/json'
+    }
+
+    response = requests.request("POST", url, headers=headers, data=payload.encode("utf-8"))
+
+    return response.json()
 
 def protect_names(texts, names):
     """将女优名用 <mstrans:dictionary> 包裹防止翻译"""

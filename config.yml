@@ -184,16 +184,16 @@ translator:
     #    model: 'gemini-2.0-flash'
     ## 使用百度翻译: {{{
     # engine:
-#       name: baidu
+       name: baidu
 #       # 百度翻译的APP ID和密钥
-#       app_id: '20240419002029224'
-#       api_key: '8bDJ1cWtusTN7ddZXkJw'
+       app_id: 'jP7Bhh4PoKjyCQGx1byKfl0X'
+       api_key: 'dkfFAwIjmP5RnTscpmsPEQXIhGKMku6c'
     ## }}}
     ## 使用必应翻译: {{{
     # engine:
-       name: bing
+#       name: bing
        # 微软必应翻译（Azure 认知服务 → 翻译）的密钥
-       api_key: '5p2dUQeLCZVaUEOK821GTrnuxtHpEQA2mEx4odyS0o3zsIhihsl7JQQJ99BGACULyCpXJ3w3AAAbACOGIAF8'
+#       api_key: '5p2dUQeLCZVaUEOK821GTrnuxtHpEQA2mEx4odyS0o3zsIhihsl7JQQJ99BGACULyCpXJ3w3AAAbACOGIAF8'
     ## }}}
     ## 使用Claude翻译: {{{
     # engine:
