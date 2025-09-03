@@ -51,10 +51,10 @@ network:
   # 各个站点的免代理地址。地址失效时软件会自动尝试获取新地址，你也可以手动设置
   proxy_free:
     avsox: "https://avsox.click"
-    javbus: "https://www.buscdn.ink/"
-    javdb: "https://javdb.com/"
+    javbus: "https://www.buscdn.ink"
+    javdb: "https://javdb.com"
     javlib: "https://www.x92g.com"
-    missav: "https://missav.ai/"
+    missav: "https://missav.ai"
   # 网络问题导致抓取数据失败时的重试次数，通常3次就差不多了
   retry: 1
   # https://en.wikipedia.org/wiki/ISO_8601#Durations
