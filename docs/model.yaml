@@ -10,6 +10,17 @@ proxy-providers:
       interval: 300
     proxy: 直连
 
+  Airport2:
+    url: "https://qf.dingdadao.dpdns.org/b3a04124-3ff3-41de-881a-9f35d85e888c?clash"
+    type: http
+    interval: 14400
+    health-check:
+      enable: true
+      url: https://www.gstatic.com/generate_204
+      interval: 300
+    proxy: 直连
+
+
 # 节点信息
 proxies:
   - {name: 直连, type: direct, udp: true}
@@ -111,9 +122,9 @@ dns:
 
 # 出站策略
 # 注意锚点必须放在引用的上方，可以集中把锚点全部放yaml的顶部。
-pr: &pr {type: select, proxies: [🚀 默认代理, 🔯 香港故转, 🔯 日本故转, ♻️ 香港自动, ♻️ 日本自动, ♻️ 美国自动, ♻️ 自动选择, 🇭🇰 香港节点, 🇯🇵 日本节点, 🇺🇲 美国节点, 🌐 全部节点, 直连]}
+pr: &pr {type: select, proxies: [🚀 默认代理, 🔯 香港故转, 🔯 日本故转, ♻️ 香港自动, ♻️ 日本自动, ♻️ 美国自动, ♻️ 自动选择, 🇭🇰 香港节点, 🇯🇵 日本节点,☁️CF节点, 🇺🇲 美国节点, 🌐 全部节点, 直连]}
 proxy-groups:
-  - {name: 🚀 默认代理, type: select, proxies: [🔯 香港故转, 🔯 日本故转, ♻️ 香港自动, ♻️ 日本自动, ♻️ 美国自动, ♻️ 自动选择, 🇭🇰 香港节点, 🇯🇵 日本节点, 🇺🇲 美国节点, 🌐 全部节点, 直连]}
+  - {name: 🚀 默认代理, type: select, proxies: [🔯 香港故转, 🔯 日本故转, ♻️ 香港自动, ♻️ 日本自动, ♻️ 美国自动, ♻️ 自动选择, 🇭🇰 香港节点, 🇯🇵 日本节点, ☁️CF节点,🇺🇲 美国节点, 🌐 全部节点, 直连]}
   - {name: 📹 YouTube, <<: *pr}
   - {name: 🍀 Google, <<: *pr}
   - {name: 🤖 ChatGPT, <<: *pr}
@@ -127,10 +138,12 @@ proxy-groups:
   - {name: 💶 PayPal, <<: *pr}
   - {name: 🐦 TuiTe, <<: *pr}
   - {name: 🌻 CustomProxy, <<: *pr}
+  - {name: 🇯🇵 日本刮削, <<: *pr}
   - {name: 🍎 Apple, type: select, proxies: [直连, 🚀 默认代理]}
   - {name: 🎯 直连, type: select, proxies: [直连, 🚀 默认代理]}
   - {name: 🐟 漏网之鱼, <<: *pr}
   - {name: 🇭🇰 香港节点, type: select, include-all: true, filter: "(?i)港|hk|hongkong|hong kong"}
+  - {name: "☁️CF节点", type: select, include-all: true, filter: "(?i)优|CF|cfst"}
   - {name: 🇯🇵 日本节点, type: select, include-all: true, filter: "(?i)日|jp|japan"}
   - {name: 🇺🇲 美国节点, type: select, include-all: true, filter: "(?i)美|us|unitedstates|united states"}
   - {name: 🔯 香港故转, type: fallback, include-all: true, tolerance: 20, interval: 300, filter: "(?=.*(港|HK|(?i)Hong))^((?!(台|日|韩|新|深|美)).)*$"}
@@ -152,14 +165,14 @@ rules:
   - RULE-SET,WeChat_text,🎯 直连
   - RULE-SET,NetEaseMusic_text,🎯 直连
   - RULE-SET,Tuite_text,🐦 TuiTe
-  - RULE-SET,JpGx_text,🇯🇵 日本节点
+  - RULE-SET,JpGx_text,🇯🇵 日本刮削
+  - RULE-SET,ai,🤖 ChatGPT
   - RULE-SET,cloudflare_ip,🎯 直连
   - RULE-SET,cloudfront_ip,🎯 直连
   - RULE-SET,cn_ip,🎯 直连
   - RULE-SET,gfw_domain,🚀 默认代理
   - RULE-SET,BlockHttpDNS_text,REJECT
   - RULE-SET,apple_domain,🍎 Apple
-  - RULE-SET,ai,🤖 ChatGPT
   - RULE-SET,github_domain,👨🏿‍💻 GitHub
   - RULE-SET,youtube_domain,📹 YouTube
   - RULE-SET,google_domain,🍀 Google
@@ -173,6 +186,7 @@ rules:
   - RULE-SET,google_ip,🍀 Google,no-resolve
   - RULE-SET,netflix_ip,🎥 NETFLIX,no-resolve
   - RULE-SET,telegram_ip,📲 Telegram,no-resolve
+  - RULE-SET,BlockHttpDNS,REJECT
   #- RULE-SET,geolocation-!cn,🚀 默认代理
   - MATCH,🐟 漏网之鱼
 
@@ -190,12 +204,14 @@ rule-providers:
   CustomProxy_text: { <<: *class, url: "https://raw.githubusercontent.com/dingdadao/cosDnaPorxy/refs/heads/master/scripts/shell/CustomProxy.yaml" }
 
   WeChat_text: { <<: *class, url: "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/refs/heads/master/rule/Clash/WeChat/WeChat.yaml" }
+  BlockHttpDNS: { <<: *class, url: "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/refs/heads/master/rule/Clash/BlockHttpDNS/BlockHttpDNS.yaml" }
   Bing_text: { <<: *class, url: "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Bing/Bing.yaml" }
   Tuite_text: { <<: *class, url: "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Twitter/Twitter.yaml" }
   JpGx_text: { <<: *class, url: "https://raw.githubusercontent.com/dingdadao/cosDnaPorxy/refs/heads/master/scripts/shell/jp.yaml" }
   NetEaseMusic_text: { <<: *class, url: "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/refs/heads/master/rule/Clash/NetEaseMusic/NetEaseMusic_No_Resolve.yaml" }
   BlockHttpDNS_text: { <<: *class, url: "https://github.com/blackmatrix7/ios_rule_script/raw/refs/heads/master/rule/Clash/BlockHttpDNS/BlockHttpDNS_No_Resolve.yaml" }
-  ai: {  <<: *domain, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/category-ai-chat-!cn.mrs" }
+  #ai: {  <<: *domain, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/category-ai-chat-!cn.mrs" }
+  ai: { <<: *class, url: "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/OpenAI/OpenAI.yaml" }
   youtube_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"}
   google_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"}
   github_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/github.mrs"}
