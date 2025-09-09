@@ -66,7 +66,7 @@ crawler:
   # airav avsox avwiki fanza fc2 fc2fan javbus javdb javlib javmenu jav321 mgstage prestige arzon_iv
   # airav, avsox, javbus, javdb, javlib, jav321, mgstage, prestige
   selection:
-    normal: [airav, avsox, javbus, javdb, javlib, mgstage, prestige]
+    normal: [javdb, airav, avsox, javbus, javlib, mgstage, prestige]
     fc2: [fc2, avsox, javdb, javmenu, fc2ppvdb]
     cid: [fanza]
     getchu: [dl_getchu]
