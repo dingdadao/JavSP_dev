@@ -52,7 +52,7 @@ network:
   proxy_free:
     avsox: "https://avsox.click"
     javbus: "https://www.buscdn.ink"
-    javdb: "https://javdb.com"
+    javdb: "https://javdb561.com"
     javlib: "https://www.x92g.com"
     missav: "https://missav.ai"
   # 网络问题导致抓取数据失败时的重试次数，通常3次就差不多了
@@ -66,7 +66,7 @@ crawler:
   # airav avsox avwiki fanza fc2 fc2fan javbus javdb javlib javmenu jav321 mgstage prestige arzon_iv
   # airav, avsox, javbus, javdb, javlib, jav321, mgstage, prestige
   selection:
-    normal: [javdb,jav321]
+    normal: [airav, avsox, javbus, javdb, javlib, jav321, mgstage, prestige]
     fc2: [fc2, avsox, javdb, javmenu, fc2ppvdb]
     cid: [fanza]
     getchu: [dl_getchu]
