@@ -460,7 +460,7 @@ def RunNormalMode(all_movies):
             inner_bar.set_description(f'启动并发任务')
             all_info = None
             try:
-                all_info = parallel_crawler(movie, inner_bar)
+                all_info = parallel_crawler(movie)
                 if not all_info:
                     check_step(False, f"并发任务失败: 没有返回有效数据", should_continue=True)
                     continue
