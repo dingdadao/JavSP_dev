@@ -1,19 +1,9 @@
 # 机场订阅
 proxy-providers:
   Airport1:
-    url: "https://bayoeorescentpossessicoanseparateuneforescenphocommitte.adoptangelaboradvacotionclwonthorughconfrmcompimentdeseertaltar.org/link/2p24K1ehr3chojfE?clash=1"
+    url: ""
     type: http
     interval: 86400
-    health-check:
-      enable: true
-      url: https://www.gstatic.com/generate_204
-      interval: 300
-    proxy: 直连
-
-  Airport2:
-    url: "https://qf.dingdadao.dpdns.org/b3a04124-3ff3-41de-881a-9f35d85e888c?clash"
-    type: http
-    interval: 14400
     health-check:
       enable: true
       url: https://www.gstatic.com/generate_204
@@ -114,20 +104,19 @@ dns:
   default-nameserver:
     - 223.5.5.5
   proxy-server-nameserver:
-    - https://dns.alidns.com/dns-query
+    - https://efd0e8b4-0d77-4f5d-b267-b4ec9307f1fc.dingdadao.dpdns.org/feer-go
   # namesever尽量用运营商提供的DNS
   nameserver:
     - 58.20.127.238
     - 119.29.29.29
 
-# 出站策略
-# 注意锚点必须放在引用的上方，可以集中把锚点全部放yaml的顶部。
-pr: &pr {type: select, proxies: [🚀 默认代理, 🔯 香港故转, 🔯 日本故转, ♻️ 香港自动, ♻️ 日本自动, ♻️ 美国自动, ♻️ 自动选择, 🇭🇰 香港节点, 🇯🇵 日本节点,☁️CF节点, 🇺🇲 美国节点, 🌐 全部节点, 直连]}
+# 公共锚点
+
+pr: &pr {type: select, proxies: [🚀 默认代理, 🔯 香港故转, 🔯 日本故转, 🔯 新加坡故转, 🔯 韩国故转, 🔯 台湾故转, 🔯 美国故转, 🔯 英国故转, ♻️ 香港自动, ♻️ 日本自动, ♻️ 美国自动, ♻️ 新加坡自动, ♻️ 韩国自动, ♻️ 自动选择, ♻️ 英国自动, ♻️ 台湾自动, 🇨🇳 中国移动, 🇭🇰 香港, 💩 台湾, 🇯🇵 日本, 🇰🇷 韩国, 🇸🇬 新加坡, 🇺🇲 美国, 🇬🇧 英国, 🇫🇷 法国, 🇦🇺 澳大利亚, 🇮🇪 爱尔兰, 🇳🇱 荷兰, 🇰🇵 朝鲜, 🌐 全部节点, 直连]}
 proxy-groups:
-  - {name: 🚀 默认代理, type: select, proxies: [🔯 香港故转, 🔯 日本故转, ♻️ 香港自动, ♻️ 日本自动, ♻️ 美国自动, ♻️ 自动选择, 🇭🇰 香港节点, 🇯🇵 日本节点, ☁️CF节点,🇺🇲 美国节点, 🌐 全部节点, 直连]}
+  - {name: 🚀 默认代理, type: select, proxies: [🔯 香港故转, 🔯 日本故转, 🔯 新加坡故转, 🔯 韩国故转, 🔯 台湾故转, 🔯 美国故转, 🔯 英国故转, ♻️ 香港自动, ♻️ 日本自动, ♻️ 美国自动, ♻️ 新加坡自动, ♻️ 韩国自动, ♻️ 自动选择, ♻️ 英国自动, ♻️ 台湾自动, 🇨🇳 中国移动, 🇭🇰 香港, 💩 台湾, 🇯🇵 日本, 🇰🇷 韩国, 🇸🇬 新加坡, 🇺🇲 美国, 🇬🇧 英国, 🇫🇷 法国, 🇦🇺 澳大利亚, 🇮🇪 爱尔兰, 🇳🇱 荷兰, 🇰🇵 朝鲜, 🌐 全部节点, 直连]}
   - {name: 📹 YouTube, <<: *pr}
   - {name: 🍀 Google, <<: *pr}
-  - {name: 🤖 ChatGPT, <<: *pr}
   - {name: 👨🏿‍💻 GitHub, <<: *pr}
   - {name: 🐬 OneDrive, <<: *pr}
   - {name: 🪟 Microsoft, <<: *pr}
@@ -135,24 +124,62 @@ proxy-groups:
   - {name: 📲 Telegram, <<: *pr}
   - {name: 🎥 NETFLIX, <<: *pr}
   - {name: ✈️ Speedtest, <<: *pr}
+  - {name: 🌈 OpenAI, <<: *pr}
   - {name: 💶 PayPal, <<: *pr}
   - {name: 🐦 TuiTe, <<: *pr}
   - {name: 🌻 CustomProxy, <<: *pr}
   - {name: 🇯🇵 日本刮削, <<: *pr}
-  - {name: 🍎 Apple, type: select, proxies: [直连, 🚀 默认代理]}
-  - {name: 🎯 直连, type: select, proxies: [直连, 🚀 默认代理]}
+  - {name: 🍎 Apple, <<: *pr}
   - {name: 🐟 漏网之鱼, <<: *pr}
-  - {name: 🇭🇰 香港节点, type: select, include-all: true, filter: "(?i)港|hk|hongkong|hong kong"}
-  - {name: "☁️CF节点", type: select, include-all: true, filter: "(?i)优|CF|cfst"}
-  - {name: 🇯🇵 日本节点, type: select, include-all: true, filter: "(?i)日|jp|japan"}
-  - {name: 🇺🇲 美国节点, type: select, include-all: true, filter: "(?i)美|us|unitedstates|united states"}
-  - {name: 🔯 香港故转, type: fallback, include-all: true, tolerance: 20, interval: 300, filter: "(?=.*(港|HK|(?i)Hong))^((?!(台|日|韩|新|深|美)).)*$"}
-  - {name: 🔯 日本故转, type: fallback, include-all: true, tolerance: 20, interval: 300, filter: "(?=.*(日|JP|(?i)Japan))^((?!(港|台|韩|新|美)).)*$" }
-  - {name: ♻️ 香港自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?=.*(港|HK|(?i)Hong))^((?!(台|日|韩|新|深|美)).)*$"}
-  - {name: ♻️ 日本自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?=.*(日|JP|(?i)Japan))^((?!(港|台|韩|新|美)).)*$" }
-  - {name: ♻️ 美国自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?=.*(美|US|(?i)States|America))^((?!(港|台|日|韩|新)).)*$"}
+
+  # ------------------------------
+  # 国家/地区分组
+  # ------------------------------
+  - {name: 🇨🇳 中国移动, type: select, include-all: true, filter: "(?i)(中国移动|移动|CMCC)"}
+  - {name: 🇭🇰 香港, type: select, include-all: true, filter: "(?i)(香港|HK|HKG)"}
+  - {name: 💩 台湾, type: select, include-all: true, filter: "(?i)(台湾|TW|TPE)"}
+  - {name: 🇯🇵 日本, type: select, include-all: true, filter: "(?i)(日本|JP|Japan)"}
+  - {name: 🇰🇷 韩国, type: select, include-all: true, filter: "(?i)(韩国|KR|Korea)"}
+  - {name: 🇸🇬 新加坡, type: select, include-all: true, filter: "(?i)(新加坡|SG|Singapore)"}
+  - {name: 🇺🇲 美国, type: select, include-all: true, filter: "(?i)(美国|US|America)"}
+  - {name: 🇬🇧 英国, type: select, include-all: true, filter: "(?i)(英国|UK)"}
+  - {name: 🇫🇷 法国, type: select, include-all: true, filter: "(?i)(法国|FR)"}
+  - {name: 🇦🇺 澳大利亚, type: select, include-all: true, filter: "(?i)(澳大利亚|AU|Australia)"}
+  - {name: 🇮🇪 爱尔兰, type: select, include-all: true, filter: "(?i)(爱尔兰|IE|Ireland)"}
+  - {name: 🇳🇱 荷兰, type: select, include-all: true, filter: "(?i)(荷兰|NL|Netherlands)"}
+  - {name: 🇰🇵 朝鲜, type: select, include-all: true, filter: "(?i)(朝鲜|KP|平壤|Pyongyang)"}
+
+  # ------------------------------
+  # 自动测速组
+  # ------------------------------
+  - {name: ♻️ 香港自动, type: url-test, include-all: true, interval: 300, tolerance: 20, filter: "(?i)(香港|HK|HKG)"}
+  - {name: ♻️ 日本自动, type: url-test, include-all: true, interval: 300, tolerance: 20, filter: "(?i)(日本|JP|Japan)"}
+  - {name: ♻️ 美国自动, type: url-test, include-all: true, interval: 300, tolerance: 20, filter: "(?i)(美国|US|America)"}
+  - {name: ♻️ 新加坡自动, type: url-test, include-all: true, interval: 300, tolerance: 20, filter: "(?i)(新加坡|SG|Singapore|狮城)"}
+  - {name: ♻️ 韩国自动, type: url-test, include-all: true, interval: 300, tolerance: 20, filter: "(?i)(韩国|KR|Korea|IEPL|IPLC|SK)"}
+  - {name: ♻️ 台湾自动, type: url-test, include-all: true, interval: 300, tolerance: 20, filter: "(?i)(台湾|TW|TPE)"}
+  - {name: ♻️ 英国自动, type: url-test, include-all: true, interval: 300, tolerance: 20, filter: "(?i)(英国|UK)"}
   - {name: ♻️ 自动选择, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连)).)*$"}
+
+
+  # ------------------------------
+  # 故障转 fallback
+  # ------------------------------
+  - {name: 🔯 香港故转, type: fallback, include-all: true, interval: 300, tolerance: 20, filter: "(?i)(香港|HK|HKG)"}
+  - {name: 🔯 日本故转, type: fallback, include-all: true, interval: 300, tolerance: 20, filter: "(?i)(日本|JP|Japan)"}
+  - {name: 🔯 新加坡故转, type: fallback, include-all: true, interval: 300, tolerance: 20, filter: "(?i)(新加坡|SG|Singapore|狮城)"}
+  - {name: 🔯 韩国故转, type: fallback, include-all: true, interval: 300, tolerance: 20, filter: "(?i)(韩国|KR|Korea)"}
+  - {name: 🔯 台湾故转, type: fallback, include-all: true, interval: 300, tolerance: 20, filter: "(?i)(台湾|TW|TPE)"}
+  - {name: 🔯 美国故转, type: fallback, include-all: true, interval: 300, tolerance: 20, filter: "(?i)(美国|US|America)"}
+  - {name: 🔯 英国故转, type: fallback, include-all: true, interval: 300, tolerance: 20, filter: "(?i)(英国|UK)"}
+
+  # ------------------------------
+  # 综合组
+  # ------------------------------
+  - {name: 🏠 自动选择, type: url-test, include-all: true, interval: 300, tolerance: 20, filter: "^((?!(直连)).)*$"}
   - {name: 🌐 全部节点, type: select, include-all: true}
+
+
 
 # 规则匹配
 # 此规则部分没有做防泄露处理，因为弊严重大于利！
@@ -160,16 +187,16 @@ rules:
   - RULE-SET,CustomProxy_text,🌻 CustomProxy
   - RULE-SET,DirectConnection_text,直连
   - RULE-SET,private_domain,直连
-  - RULE-SET,cn_domain,🎯 直连
-  - RULE-SET,Domestic_text,🎯 直连
-  - RULE-SET,WeChat_text,🎯 直连
-  - RULE-SET,NetEaseMusic_text,🎯 直连
+  - RULE-SET,cn_domain,直连
+  - RULE-SET,Domestic_text,直连
+  - RULE-SET,WeChat_text,直连
+  - RULE-SET,NetEaseMusic_text,直连
   - RULE-SET,Tuite_text,🐦 TuiTe
   - RULE-SET,JpGx_text,🇯🇵 日本刮削
-  - RULE-SET,ai,🤖 ChatGPT
-  - RULE-SET,cloudflare_ip,🎯 直连
-  - RULE-SET,cloudfront_ip,🎯 直连
-  - RULE-SET,cn_ip,🎯 直连
+  - RULE-SET,cloudflare_ip,直连
+  - RULE-SET,cloudfront_ip,直连
+  - RULE-SET,cn_ip,直连
+  - RULE-SET,AiDomain_text,🌈 OpenAI
   - RULE-SET,gfw_domain,🚀 默认代理
   - RULE-SET,BlockHttpDNS_text,REJECT
   - RULE-SET,apple_domain,🍎 Apple
@@ -189,6 +216,7 @@ rules:
   - RULE-SET,BlockHttpDNS,REJECT
   #- RULE-SET,geolocation-!cn,🚀 默认代理
   - MATCH,🐟 漏网之鱼
+  #- MATCH,直连
 
 # 规则集
 rule-anchor:
@@ -202,6 +230,10 @@ rule-providers:
   DirectConnection_text: { <<: *class, url: "https://raw.githubusercontent.com/dingdadao/cosDnaPorxy/refs/heads/master/scripts/shell/DirectConnection.yaml" }
   # 自定义代理规则
   CustomProxy_text: { <<: *class, url: "https://raw.githubusercontent.com/dingdadao/cosDnaPorxy/refs/heads/master/scripts/shell/CustomProxy.yaml" }
+  # ai分流
+  #AiDomain_text: {  <<: *domain, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/category-ai-chat-!cn.mrs" }
+  AiDomain_text: { <<: *class, url: "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/OpenAI/OpenAI.yaml" }
+
 
   WeChat_text: { <<: *class, url: "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/refs/heads/master/rule/Clash/WeChat/WeChat.yaml" }
   BlockHttpDNS: { <<: *class, url: "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/refs/heads/master/rule/Clash/BlockHttpDNS/BlockHttpDNS.yaml" }
@@ -210,8 +242,7 @@ rule-providers:
   JpGx_text: { <<: *class, url: "https://raw.githubusercontent.com/dingdadao/cosDnaPorxy/refs/heads/master/scripts/shell/jp.yaml" }
   NetEaseMusic_text: { <<: *class, url: "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/refs/heads/master/rule/Clash/NetEaseMusic/NetEaseMusic_No_Resolve.yaml" }
   BlockHttpDNS_text: { <<: *class, url: "https://github.com/blackmatrix7/ios_rule_script/raw/refs/heads/master/rule/Clash/BlockHttpDNS/BlockHttpDNS_No_Resolve.yaml" }
-  #ai: {  <<: *domain, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/category-ai-chat-!cn.mrs" }
-  ai: { <<: *class, url: "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/OpenAI/OpenAI.yaml" }
+
   youtube_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"}
   google_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"}
   github_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/github.mrs"}
