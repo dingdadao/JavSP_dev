@@ -129,18 +129,22 @@ class Request():
     def _scraper_monitor(self, func):
         """监控cloudscraper的工作状态，遇到不支持的Challenge时尝试退回常规的requests请求"""
         def wrapper(*args, **kw):
-            # 确保传递SSL验证设置
-            kw['verify'] = ssl_verify
+            # 确保传递SSL验证设置，但避免重复参数
+            kw.setdefault('verify', ssl_verify)
             try:
                 return func(*args, **kw)
             except Exception as e:
                 logger.debug(f"无法通过CloudFlare检测: '{e}', 尝试退回常规的requests请求")
-                # 在退回时也要考虑SSL验证设置
+                # 在退回时也要考虑SSL验证设置，同样避免重复参数
                 # 根据函数名称判断是get还是post请求
                 if 'get' in str(func).lower():
-                    return requests.get(*args, verify=ssl_verify, **kw)
+                    kw_copy = kw.copy()
+                    kw_copy.setdefault('verify', ssl_verify)
+                    return requests.get(*args, **kw_copy)
                 else:
-                    return requests.post(*args, verify=ssl_verify, **kw)
+                    kw_copy = kw.copy()
+                    kw_copy.setdefault('verify', ssl_verify)
+                    return requests.post(*args, **kw_copy)
         return wrapper
 
     def _create_request_wrapper(self, original_func):
@@ -152,35 +156,60 @@ class Request():
         return wrapper
 
     def get(self, url, delay_raise=False):
-        r = self.__get(url,
-                       headers=self.headers,
-                       proxies=self.proxies,
-                       cookies=self.cookies,
-                       timeout=self.timeout,
-                       verify=ssl_verify)
+        # 对于scraper，verify参数已经在scraper实例中设置，不需要单独传递
+        if self.scraper is not None:
+            r = self.__get(url,
+                           headers=self.headers,
+                           proxies=self.proxies,
+                           cookies=self.cookies,
+                           timeout=self.timeout)
+        else:
+            r = self.__get(url,
+                           headers=self.headers,
+                           proxies=self.proxies,
+                           cookies=self.cookies,
+                           timeout=self.timeout,
+                           verify=ssl_verify)
         if not delay_raise:
             r.raise_for_status()
         return r
 
     def post(self, url, data, delay_raise=False):
-        r = self.__post(url,
-                        data=data,
-                        headers=self.headers,
-                        proxies=self.proxies,
-                        cookies=self.cookies,
-                        timeout=self.timeout,
-                        verify=ssl_verify)
+        # 对于scraper，verify参数已经在scraper实例中设置，不需要单独传递
+        if self.scraper is not None:
+            r = self.__post(url,
+                            data=data,
+                            headers=self.headers,
+                            proxies=self.proxies,
+                            cookies=self.cookies,
+                            timeout=self.timeout)
+        else:
+            r = self.__post(url,
+                            data=data,
+                            headers=self.headers,
+                            proxies=self.proxies,
+                            cookies=self.cookies,
+                            timeout=self.timeout,
+                            verify=ssl_verify)
         if not delay_raise:
             r.raise_for_status()
         return r
 
     def head(self, url, delay_raise=True):
-        r = self.__head(url,
-                        headers=self.headers,
-                        proxies=self.proxies,
-                        cookies=self.cookies,
-                        timeout=self.timeout,
-                        verify=ssl_verify)
+        # 对于scraper，verify参数已经在scraper实例中设置，不需要单独传递
+        if self.scraper is not None:
+            r = self.__head(url,
+                            headers=self.headers,
+                            proxies=self.proxies,
+                            cookies=self.cookies,
+                            timeout=self.timeout)
+        else:
+            r = self.__head(url,
+                            headers=self.headers,
+                            proxies=self.proxies,
+                            cookies=self.cookies,
+                            timeout=self.timeout,
+                            verify=ssl_verify)
         if not delay_raise:
             r.raise_for_status()
         return r

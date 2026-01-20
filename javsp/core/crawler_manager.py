@@ -55,6 +55,12 @@ class CrawlerManager:
                         f'{crawler_name}: SSL错误，正在重试 ({cnt+1}/{retry}): \n{repr(e)}')
                     if isinstance(tqdm_bar, tqdm):
                         tqdm_bar.set_description(f'{crawler_name}: SSL错误，正在重试')
+                except requests.exceptions.ConnectionError as e:
+                    logger.warning(f'{crawler_name}: 连接错误: {repr(e)}')
+                    logger.debug(
+                        f'{crawler_name}: 连接错误，正在重试 ({cnt+1}/{retry}): \n{repr(e)}')
+                    if isinstance(tqdm_bar, tqdm):
+                        tqdm_bar.set_description(f'{crawler_name}: 连接错误，正在重试')
                 except requests.exceptions.RequestException as e:
                     logger.debug(
                         f'{crawler_name}: 网络错误，正在重试 ({cnt+1}/{retry}): \n{repr(e)}')
@@ -65,7 +71,7 @@ class CrawlerManager:
             else:
                 # 如果所有重试都失败，恢复SSL验证设置
                 if retry > 0:
-                    set_ssl_verification(True)
+                    set_ssl_verification(True)  # 恢复SSL验证设置
 
         # 根据影片的数据源获取对应的抓取器
         crawler_mods: List[CrawlerID] = self.config.crawler.selection[movie.data_src]
