@@ -565,7 +565,6 @@ def RunNormalMode(all_movies):
 
             # 下载剧照
             if Cfg().summarizer.extra_fanarts.enabled:
-                scrape_interval = Cfg().summarizer.extra_fanarts.scrap_interval.total_seconds()
                 concurrent_downloads = Cfg().summarizer.extra_fanarts.concurrent_downloads
                 inner_bar.set_description('下载剧照')
                 try:
@@ -610,7 +609,6 @@ def RunNormalMode(all_movies):
                                 except Exception as e:
                                     check_step(
                                         False, f"下载剧照{id}: {pic_url}失败", should_continue=True)
-                                time.sleep(scrape_interval)
                 except Exception as e:
                     logger.error(f"下载剧照失败: {e}")
                     check_step(False, f"下载剧照失败: {e}", should_continue=True)
