@@ -4,6 +4,7 @@ import csv
 import json
 import shutil
 import logging
+import hashlib
 from functools import cached_property
 
 from javsp.config import Cfg
@@ -12,6 +13,7 @@ from javsp.lib import resource_path, detect_special_attr
 
 logger = logging.getLogger(__name__)
 filemove_logger = logging.getLogger('filemove')
+
 
 class MovieInfo:
     def __init__(self, dvdid: str = None, /, *, cid: str = None, from_file=None):
@@ -103,9 +105,11 @@ class MovieInfo:
         d['num'] = info.dvdid or info.cid
         d['title'] = info.title or Cfg().summarizer.default.title
         d['rawtitle'] = info.ori_title or d['title']
-        d['actress'] = ','.join(info.actress) if info.actress else Cfg().summarizer.default.actress
+        d['actress'] = ','.join(
+            info.actress) if info.actress else Cfg().summarizer.default.actress
         d['score'] = info.score or '0'
-        d['censor'] = Cfg().summarizer.censor_options_representation[1 if info.uncensored else 0]
+        d['censor'] = Cfg(
+        ).summarizer.censor_options_representation[1 if info.uncensored else 0]
         d['serial'] = info.serial or Cfg().summarizer.default.series
         d['director'] = info.director or Cfg().summarizer.default.director
         d['producer'] = info.producer or Cfg().summarizer.default.producer
@@ -115,13 +119,15 @@ class MovieInfo:
         # cid中不会出现'-'，可以直接从d['num']拆分出label
         num_items = d['num'].split('-')
         d['label'] = num_items[0] if len(num_items) > 1 else '---'
-        d['genre'] = ','.join(info.genre_norm if info.genre_norm else info.genre if info.genre else [])
+        d['genre'] = ','.join(
+            info.genre_norm if info.genre_norm else info.genre if info.genre else [])
 
         return d
 
 
 class Movie:
     """用于关联影片文件的类"""
+
     def __init__(self, dvdid=None, /, *, cid=None) -> None:
         arg_count = len([i for i in (dvdid, cid) if i])
         if arg_count != 1:
@@ -169,44 +175,87 @@ class Movie:
 
     def rename_files(self, use_hardlink: bool = False) -> None:
         """根据命名规则移动（重命名）影片文件"""
-        def move_file(src:str, dst:str):
+        def move_file(src: str, dst: str):
             """移动（重命名）文件并记录信息到日志"""
             abs_dst = os.path.abspath(dst)
-            # shutil.move might overwrite dst file
+
+            # 检查目标文件是否存在
             if os.path.exists(abs_dst):
-                raise FileExistsError(f'File exists: {abs_dst}')
-            if (use_hardlink):
-                os.link(src, abs_dst)
-            else:
-                shutil.move(src, abs_dst)
-            src_rel = os.path.relpath(src)
-            dst_name = os.path.basename(dst)
-            logger.info(f"重命名文件: '{src_rel}' -> '...{os.sep}{dst_name}'")
-            # 目前StreamHandler并未设置filter，为了避免显示中出现重复的日志，这里暂时只能用debug级别
-            filemove_logger.debug(f'移动（重命名）文件: \n  原路径: "{src}"\n  新路径: "{abs_dst}"')
+                if os.path.samefile(src, abs_dst):
+                    # 源和目标是同一个文件，无需操作
+                    logger.debug(f"源文件和目标文件相同，跳过: '{src}'")
+                    return dst
+                else:
+                    raise FileExistsError(f'目标文件已存在: {abs_dst}')
+
+            # 检查目标目录是否存在，不存在则创建
+            dst_dir = os.path.dirname(abs_dst)
+            os.makedirs(dst_dir, exist_ok=True)
+
+            try:
+                if use_hardlink:
+                    # 尝试创建硬链接
+                    os.link(src, abs_dst)
+                else:
+                    # 使用shutil.move移动文件
+                    shutil.move(src, abs_dst)
+
+                src_rel = os.path.relpath(src)
+                dst_name = os.path.basename(dst)
+                logger.info(f"移动文件: '{src_rel}' -> '...{os.sep}{dst_name}'")
+                # 目前StreamHandler并未设置filter，为了避免显示中出现重复的日志，这里暂时只能用debug级别
+                filemove_logger.debug(
+                    f'移动（重命名）文件: \n  原路径: "{src}"\n  新路径: "{abs_dst}"')
+
+                return abs_dst
+            except OSError as e:
+                logger.error(f"移动文件失败: '{src}' -> '{abs_dst}', 错误: {e}")
+                raise
 
         new_paths = []
-        dir = os.path.dirname(self.files[0])
+        dir_to_check = os.path.dirname(self.files[0])
+
+        # 预先检查所有目标路径，避免中途失败
+        target_paths = []
         if len(self.files) == 1:
             fullpath = self.files[0]
             ext = os.path.splitext(fullpath)[1]
             newpath = os.path.join(self.save_dir, self.basename + ext)
-            move_file(fullpath, newpath)
-            new_paths.append(newpath)
+            target_paths.append((fullpath, newpath))
         else:
             for i, fullpath in enumerate(self.files, start=1):
                 ext = os.path.splitext(fullpath)[1]
-                newpath = os.path.join(self.save_dir, self.basename + f'-CD{i}' + ext)
-                move_file(fullpath, newpath)
-                new_paths.append(newpath)
+                newpath = os.path.join(
+                    self.save_dir, self.basename + f'-CD{i}' + ext)
+                target_paths.append((fullpath, newpath))
+
+        # 检查所有目标路径是否已存在
+        for src, dst in target_paths:
+            abs_dst = os.path.abspath(dst)
+            if os.path.exists(abs_dst) and not os.path.samefile(src, abs_dst):
+                raise FileExistsError(f'目标文件已存在: {abs_dst}')
+
+        # 执行移动操作
+        for src, dst in target_paths:
+            moved_path = move_file(src, dst)
+            if moved_path:  # 只有在文件确实被移动时才添加到列表
+                new_paths.append(moved_path)
+
         self.new_paths = new_paths
-        if len(os.listdir(dir)) == 0:
-            #如果移动文件后目录为空则删除该目录
-            os.rmdir(dir)
+
+        # 检查原目录是否为空并删除
+        try:
+            if os.path.isdir(dir_to_check) and len(os.listdir(dir_to_check)) == 0:
+                # 如果移动文件后目录为空则删除该目录
+                os.rmdir(dir_to_check)
+                logger.debug(f"删除空目录: '{dir_to_check}'")
+        except OSError as e:
+            logger.warning(f"删除空目录失败: '{dir_to_check}', 错误: {e}")
 
 
 class GenreMap(dict):
     """genre的映射表"""
+
     def __init__(self, file):
         genres = {}
         with open(resource_path(file), newline='', encoding='utf-8-sig') as csvfile:
@@ -215,9 +264,11 @@ class GenreMap(dict):
                 for row in reader:
                     genres[row['id']] = row['translate']
             except UnicodeDecodeError:
-                logger.error('CSV file must be saved as UTF-8-BOM to edit is in Excel')
+                logger.error(
+                    'CSV file must be saved as UTF-8-BOM to edit is in Excel')
             except KeyError:
-                logger.error("The columns 'id' and 'translate' must exist in the csv file")
+                logger.error(
+                    "The columns 'id' and 'translate' must exist in the csv file")
         self.update(genres)
 
     def map(self, ls):
@@ -225,3 +276,50 @@ class GenreMap(dict):
         mapped = [self.get(i, i) for i in ls]
         cleaned = [i for i in mapped if i]  # 译文为空表示此genre应当被删除
         return cleaned
+
+
+class FileOperationCache:
+    """文件操作缓存，用于避免重复的文件操作"""
+
+    def __init__(self, max_size=1000):
+        self.cache = {}
+        self.max_size = max_size
+        self.access_order = []  # 用于LRU淘汰
+
+    def _make_key(self, operation, *args, **kwargs):
+        """生成缓存键"""
+        key_str = f"{operation}:{str(args)}:{str(sorted(kwargs.items()))}"
+        return hashlib.md5(key_str.encode()).hexdigest()
+
+    def get(self, operation, *args, **kwargs):
+        """获取缓存结果"""
+        key = self._make_key(operation, *args, **kwargs)
+        if key in self.cache:
+            # 更新访问顺序
+            if key in self.access_order:
+                self.access_order.remove(key)
+            self.access_order.append(key)
+            return self.cache[key]
+        return None
+
+    def set(self, operation, result, *args, **kwargs):
+        """设置缓存结果"""
+        key = self._make_key(operation, *args, **kwargs)
+
+        # 如果缓存已满，删除最久未使用的项目
+        if len(self.cache) >= self.max_size:
+            if self.access_order:
+                oldest_key = self.access_order.pop(0)
+                del self.cache[oldest_key]
+
+        self.cache[key] = result
+        self.access_order.append(key)
+
+    def clear(self):
+        """清空缓存"""
+        self.cache.clear()
+        self.access_order.clear()
+
+
+# 全局文件操作缓存实例
+file_op_cache = FileOperationCache()

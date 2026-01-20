@@ -11,7 +11,7 @@ scanner:
     - "Carib(beancom)?"
     - '[^a-z\d](f?hd|lt)[^a-z\d]'
   # 整理哪个文件夹下的影片？（此项留空时将在运行时询问）
-  input_directory: "/volume1/Media/Download/"
+  input_directory: /mnt/nas/download
   # 哪些后缀的文件应当视为影片？
   filename_extensions:
     [
@@ -40,7 +40,7 @@ scanner:
     ['^\.', "^#recycle$", "^#整理完成$", "^#不要扫描$"]
   # 匹配番号时忽略小于指定大小的文件
   # 格式要求：https://docs.pydantic.dev/2.0/usage/types/bytesize/
-  minimum_size: 300MiB
+  minimum_size: 232MiB
   skip_nfo_dir: no
   manual: no
 ################################
@@ -51,22 +51,20 @@ network:
   # 各个站点的免代理地址。地址失效时软件会自动尝试获取新地址，你也可以手动设置
   proxy_free:
     avsox: "https://avsox.click"
-    javbus: "https://www.buscdn.ink"
-    javdb: "https://javdb561.com"
-    javlib: "https://www.x92g.com"
-    missav: "https://missav.ai"
+    javbus: "https://www.seedmm.help"
+    javdb: "https://javdb565.com"
+    javlib: "https://www.y78k.com"
   # 网络问题导致抓取数据失败时的重试次数，通常3次就差不多了
-  retry: 1
+  retry: 3
   # https://en.wikipedia.org/wiki/ISO_8601#Durations
   timeout: PT10S
 
 ################################
 crawler:
   # 要使用的爬虫列表（汇总数据时从前到后进行）
-  # airav avsox avwiki fanza fc2 fc2fan javbus javdb javlib javmenu jav321 mgstage prestige arzon_iv
-  # airav, avsox, javbus, javdb, javlib, jav321, mgstage, prestige
+  # airav avsox avwiki fanza fc2 fc2fan javbus javdb javlib javmenu jav321 mgstage prestige arzon arzon_iv
   selection:
-    normal: [airav, avsox, javbus, javdb, javlib, jav321, mgstage, prestige]
+    normal: [airav, avsox, javdb, javlib, jav321, mgstage, prestige]
     fc2: [fc2, avsox, javdb, javmenu, fc2ppvdb]
     cid: [fanza]
     getchu: [dl_getchu]
@@ -98,9 +96,9 @@ summarizer:
   # 路径相关的选项
   path:
     # 存放影片、封面等文件的文件夹路径
-    output_folder_pattern: "/volume1/Media/actresses/{actress}/[{num}] {title}"
+    output_folder_pattern: "/mnt/nas/JapanMovie/{actress}/{title}"
     # 影片、封面、nfo信息文件等的文件名将基于下面的规则来创建
-    basename_pattern: "{num}"
+    basename_pattern: "[{num}] {title}"
     # 允许的最长文件路径（路径过长时将据此自动截短标题）
     length_maximum: 250
     # 是否以字节数来计算文件路径长度
@@ -129,7 +127,7 @@ summarizer:
     # nfo文件的名称
     basename_pattern: "movie"
     # nfo文件中的影片标题（即媒体管理工具中显示的标题）
-    title_pattern: "{title} {num}"
+    title_pattern: "{num} {title}"
     # 要添加到自定义分类的字段，空列表表示不添加
     custom_genres_fields: ["{genre}", "{censor}"]
     # 要添加到自定义标签的字段，空列表表示不添加
@@ -167,7 +165,7 @@ summarizer:
 
   extra_fanarts:
     # 是否下载剧照？
-    enabled: False
+    enabled: true
     # 间隔的两次封面爬取请求之间应该间隔多久
     scrap_interval: PT1.5S
 
@@ -176,40 +174,33 @@ translator:
   # 翻译引擎，可选: google, bing, baidu, claude(haiku), openai （Google可以直接免费使用。留空表示禁用翻译功能）
   # 进阶功能的文档 https://github.com/Yuukiy/JavSP/wiki/Translation-%7C-%E7%BF%BB%E8%AF%91
   engine:
-    #    name: googleai
-    #    # OpenAI API（默认使用 Groq，可替换成任何兼容 OpenAI 的第三方 API）
-    #    url: 'https://generativelanguage.googleapis.com/v1beta/models/'
-    #    api_key: 'AIzaSyC9pwY5PrX2iE_tcJJpegln8QGkO-XMwbM'
-    #    # 要使用的模型（默认使用 Groq 的 llama-3.1-70b-versatile 模型，若使用 OpenAI 官方 API 的话一般模型为 gpt-3.5-turbo）
-    #    model: 'gemini-2.0-flash'
     ## 使用百度翻译: {{{
     # engine:
-       name: baidu
-#       # 百度翻译的APP ID和密钥
-       app_id: '1BKABrHJdBrLtJtxQvlyYi7r'
-       api_key: 'xlknIh8NbZiq7ksRBhDpySDGUdmCWAUq'
-    ## }}}
-    ## 使用必应翻译: {{{
-    # engine:
-#       name: bing
-       # 微软必应翻译（Azure 认知服务 → 翻译）的密钥
-#       api_key: '5p2dUQeLCZVaUEOK821GTrnuxtHpEQA2mEx4odyS0o3zsIhihsl7JQQJ99BGACULyCpXJ3w3AAAbACOGIAF8'
-    ## }}}
-    ## 使用Claude翻译: {{{
-    # engine:
-    #   name: claude
-    #   # Claude的密钥 (使用haiku模型)
-    #   api_key: ''
-    ## }}}
-    ## 使用OpenAI翻译: {{{
-    # engine:
-#    name: 'openai'
-#    # OpenAI API（默认使用 Groq，可替换成任何兼容 OpenAI 的第三方 API）
-#    url: "https://api.groq.com/openai/v1/chat/completions"
-#    # 请设置环境变量 JAVSP_OPENAI_API_KEY 来提供API密钥
-#    api_key: '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'
-#    # 要使用的模型（默认使用 Groq 的 llama-3.1-70b-versatile 模型，若使用 OpenAI 官方 API 的话一般模型为 gpt-3.5-turbo）
-#    model: "llama-3.3-70b-versatile"
+    name: baidu
+    #   # 百度翻译的APP ID和密钥
+    app_id: "20240419002029224"
+    api_key: "8bDJ1cWtusTN7ddZXkJw"
+  ## }}}
+  ## 使用必应翻译: {{{
+  # engine:
+  #   name: bing
+  #   # 微软必应翻译（Azure 认知服务 → 翻译）的密钥
+  #   api_key: ''
+  ## }}}
+  ## 使用Claude翻译: {{{
+  # engine:
+  #   name: claude
+  #   # Claude的密钥 (使用haiku模型)
+  #   api_key: ''
+  ## }}}
+  ## 使用OpenAI翻译: {{{
+  # engine:
+  #   name: openai
+  #   # OpenAI API（默认使用 Groq，可替换成任何兼容 OpenAI 的第三方 API）
+  #   url: 'https://api.groq.com/openai/v1/chat/completions'
+  #   api_key: ''
+  #   # 要使用的模型（默认使用 Groq 的 llama-3.1-70b-versatile 模型，若使用 OpenAI 官方 API 的话一般模型为 gpt-3.5-turbo）
+  #   model: llama-3.1-70b-versatile
   ## }}}
 
   # 是否翻译各个字段

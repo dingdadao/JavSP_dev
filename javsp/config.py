@@ -10,6 +10,7 @@ import os
 
 from javsp.lib import resource_path
 
+
 class Scanner(BaseConfig):
     ignored_id_pattern: List[str]
     input_directory: Path | None = None
@@ -18,6 +19,7 @@ class Scanner(BaseConfig):
     minimum_size: ByteSize
     skip_nfo_dir: bool
     manual: bool
+
 
 class CrawlerID(str, Enum):
     airav = 'airav'
@@ -39,13 +41,24 @@ class CrawlerID(str, Enum):
     prestige = 'prestige'
     arzon = 'arzon'
     arzon_iv = 'arzon_iv'
-    missav ='missav'
+    missav = 'missav'
+
 
 class Network(BaseConfig):
     proxy_server: Url | None
     retry: NonNegativeInt = 3
     timeout: Duration
     proxy_free: Dict[CrawlerID, Url]
+    ssl_verification: bool = True
+    # 连接池配置
+    pool_connections: int = 20
+    pool_maxsize: int = 20
+    pool_block: bool = False
+    # 重试配置
+    retry_total: int = 3
+    retry_backoff_factor: float = 1.0
+    retry_status_forcelist: list[int] = [429, 500, 502, 503, 504]
+
 
 class CrawlerSelect(BaseConfig):
     def items(self) -> List[tuple[str, list[CrawlerID]]]:
@@ -58,24 +71,25 @@ class CrawlerSelect(BaseConfig):
         ]
 
     def __getitem__(self, index) -> list[CrawlerID]:
-        match index:
-            case 'normal':
-                return self.normal
-            case 'fc2':
-                return self.fc2
-            case 'cid':
-                return self.cid
-            case 'getchu':
-                return self.getchu
-            case 'gyutto':
-                return self.gyutto
-        raise Exception("Unknown crawler type")
+        if index == 'normal':
+            return self.normal
+        elif index == 'fc2':
+            return self.fc2
+        elif index == 'cid':
+            return self.cid
+        elif index == 'getchu':
+            return self.getchu
+        elif index == 'gyutto':
+            return self.gyutto
+        else:
+            raise Exception("Unknown crawler type")
 
     normal: list[CrawlerID]
     fc2: list[CrawlerID]
     cid: list[CrawlerID]
     getchu: list[CrawlerID]
     gyutto: list[CrawlerID]
+
 
 class MovieInfoField(str, Enum):
     dvdid = 'dvdid'
@@ -103,10 +117,12 @@ class MovieInfoField(str, Enum):
     preview_pics = 'preview_pics'
     preview_video = 'preview_video'
 
+
 class UseJavDBCover(str, Enum):
     yes = "yes"
     no = "no"
     fallback = "fallback"
+
 
 class Crawler(BaseConfig):
     selection: CrawlerSelect
@@ -118,6 +134,7 @@ class Crawler(BaseConfig):
     use_javdb_cover: UseJavDBCover
     normalize_actress_name: bool
 
+
 class MovieDefault(BaseConfig):
     title: str
     actress: str
@@ -125,6 +142,7 @@ class MovieDefault(BaseConfig):
     director: str
     producer: str
     publisher: str
+
 
 class PathSummarize(BaseConfig):
     output_folder_pattern: str
@@ -134,8 +152,10 @@ class PathSummarize(BaseConfig):
     max_actress_count: PositiveInt = 10
     hard_link: bool
 
+
 class TitleSummarize(BaseConfig):
     remove_trailing_actor_name: bool
+
 
 class NFOSummarize(BaseConfig):
     basename_pattern: str
@@ -143,16 +163,20 @@ class NFOSummarize(BaseConfig):
     custom_genres_fields: list[str]
     custom_tags_fields: list[str]
 
+
 class ExtraFanartSummarize(BaseConfig):
     enabled: bool
     scrap_interval: Duration
 
+
 class SlimefaceEngine(BaseConfig):
     name: Literal['slimeface']
 
+
 class CoverCrop(BaseConfig):
-  engine: SlimefaceEngine | None
-  on_id_pattern: list[str]
+    engine: SlimefaceEngine | None
+    on_id_pattern: list[str]
+
 
 class CoverSummarize(BaseConfig):
     basename_pattern: str
@@ -160,8 +184,10 @@ class CoverSummarize(BaseConfig):
     add_label: bool
     crop: CoverCrop
 
+
 class FanartSummarize(BaseConfig):
     basename_pattern: str
+
 
 class Summarizer(BaseConfig):
     default: MovieDefault
@@ -174,18 +200,22 @@ class Summarizer(BaseConfig):
     fanart: FanartSummarize
     extra_fanarts: ExtraFanartSummarize
 
+
 class BaiduTranslateEngine(BaseConfig):
     name: Literal['baidu']
     app_id: str
     api_key: str
 
+
 class BingTranslateEngine(BaseConfig):
     name: Literal['bing']
     api_key: str
 
+
 class ClaudeTranslateEngine(BaseConfig):
     name: Literal['claude']
     api_key: str
+
 
 class OpenAITranslateEngine(BaseConfig):
     name: Literal['openai']
@@ -193,20 +223,24 @@ class OpenAITranslateEngine(BaseConfig):
     api_key: str
     model: str
 
+
 class GoogleTranslateEngine(BaseConfig):
     name: Literal['google']
 
+
 TranslateEngine: TypeAlias = Union[
-        BaiduTranslateEngine,
-        BingTranslateEngine,
-        ClaudeTranslateEngine,
-        OpenAITranslateEngine,
-        GoogleTranslateEngine,
-        None]
+    BaiduTranslateEngine,
+    BingTranslateEngine,
+    ClaudeTranslateEngine,
+    OpenAITranslateEngine,
+    GoogleTranslateEngine,
+    None]
+
 
 class TranslateField(BaseConfig):
     title: bool
     plot: bool
+
 
 class Translator(BaseConfig):
     engine: TranslateEngine = Field(..., discriminator='name')
@@ -226,13 +260,16 @@ class Translator(BaseConfig):
             elif self.engine.name == 'claude':
                 self.engine.api_key = os.getenv('JAVSP_CLAUDE_API_KEY')
 
+
 class Other(BaseConfig):
     interactive: bool
     check_update: bool
     auto_update: bool
 
+
 def get_config_source():
-    parser = ArgumentParser(prog='JavSP', description='汇总多站点数据的AV元数据刮削器', formatter_class=RawTextHelpFormatter)
+    parser = ArgumentParser(
+        prog='JavSP', description='汇总多站点数据的AV元数据刮削器', formatter_class=RawTextHelpFormatter)
     parser.add_argument('-c', '--config', help='使用指定的配置文件')
     args, _ = parser.parse_known_args()
     sources = []
@@ -243,6 +280,7 @@ def get_config_source():
     sources.append(CLArgSource(prefix='o'))
     return sources
 
+
 class Cfg(BaseConfig):
     scanner: Scanner
     network: Network
@@ -250,4 +288,4 @@ class Cfg(BaseConfig):
     summarizer: Summarizer
     translator: Translator
     other: Other
-    CONFIG_SOURCES=get_config_source()
+    CONFIG_SOURCES = get_config_source()

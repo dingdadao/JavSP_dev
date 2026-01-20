@@ -1,4 +1,5 @@
 """网络请求的统一接口"""
+import webbrowser
 import os
 import sys
 import time
@@ -12,20 +13,29 @@ from tqdm import tqdm
 from lxml import etree
 from lxml.html.clean import Cleaner
 from requests.models import Response
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 
 from javsp.config import Cfg
 from javsp.web.exceptions import *
 
 
-__all__ = ['Request', 'get_html', 'post_html', 'request_get', 'resp2html', 'is_connectable', 'download', 'get_resp_text', 'read_proxy']
+__all__ = ['Request', 'get_html', 'post_html', 'request_get', 'resp2html',
+           'is_connectable', 'download', 'get_resp_text', 'read_proxy', 'set_ssl_verification',
+           'close_global_session', 'reset_global_session']
 
 
-headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'}
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'}
+
+# SSL验证设置
+ssl_verify = Cfg().network.ssl_verification
 
 logger = logging.getLogger(__name__)
 # 删除js脚本相关的tag，避免网页检测到没有js运行环境时强行跳转，影响调试
 cleaner = Cleaner(kill_tags=['script', 'noscript'])
+
 
 def read_proxy():
     if Cfg().network.proxy_server is None:
@@ -34,11 +44,37 @@ def read_proxy():
         proxy = str(Cfg().network.proxy_server)
         return {'http': proxy, 'https': proxy}
 
+
+def set_ssl_verification(verify):
+    """设置SSL证书验证状态"""
+    global ssl_verify
+    ssl_verify = verify
+    logger.info(f"SSL验证已设置为: {verify}")
+
+
+def close_global_session():
+    """关闭全局会话，清理连接池"""
+    if hasattr(_global_session, 'close'):
+        _global_session.close()
+    logger.debug("全局会话已关闭，连接池已清理")
+
+
+def reset_global_session():
+    """重置全局会话，重新创建连接池"""
+    global _global_session
+    if hasattr(_global_session, 'close'):
+        _global_session.close()
+    _global_session = _create_global_session()
+    logger.debug("全局会话已重置，连接池已重建")
+
 # 与网络请求相关的功能汇总到一个模块中以方便处理，但是不同站点的抓取器又有自己的需求（针对不同网站
 # 需要使用不同的UA、语言等）。每次都传递参数很麻烦，而且会面临函数参数越加越多的问题。因此添加这个
 # 处理网络请求的类，它带有默认的属性，但是也可以在各个抓取器模块里进行进行定制
+
+
 class Request():
     """作为网络请求出口并支持各个模块定制功能"""
+
     def __init__(self, use_scraper=False) -> None:
         # 必须使用copy()，否则各个模块对headers的修改都将会指向本模块中定义的headers变量，导致只有最后一个对headers的修改生效
         self.headers = headers.copy()
@@ -46,16 +82,48 @@ class Request():
 
         self.proxies = read_proxy()
         self.timeout = Cfg().network.timeout.total_seconds()
+
+        # 创建会话对象以支持连接池
+        self.session = requests.Session()
+
+        # 获取配置
+        config = Cfg().network
+
+        # 配置重试策略
+        retry_strategy = Retry(
+            total=config.retry_total,
+            backoff_factor=config.retry_backoff_factor,
+            status_forcelist=config.retry_status_forcelist,
+        )
+        adapter = HTTPAdapter(
+            pool_connections=config.pool_connections,  # 连接池数量
+            pool_maxsize=config.pool_maxsize,          # 最大连接数
+            pool_block=config.pool_block,              # 是否阻塞等待连接
+            max_retries=retry_strategy
+        )
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
+
         if not use_scraper:
             self.scraper = None
-            self.__get = requests.get
-            self.__post = requests.post
-            self.__head = requests.head
+            # 使用会话对象进行请求以支持连接复用
+            self.__get = self._create_request_wrapper(self.session.get)
+            self.__post = self._create_request_wrapper(self.session.post)
+            self.__head = self._create_request_wrapper(self.session.head)
         else:
-            self.scraper = cloudscraper.create_scraper()
-            self.__get = self._scraper_monitor(self.scraper.get)
-            self.__post = self._scraper_monitor(self.scraper.post)
-            self.__head = self._scraper_monitor(self.scraper.head)
+            # 为cloudscraper也添加SSL验证配置和连接池
+            self.scraper = cloudscraper.create_scraper(
+                browser={'browser': 'chrome',
+                         'platform': 'windows', 'mobile': False},
+                requests_kwargs={'verify': ssl_verify},
+                session=self.session  # 使用自定义会话
+            )
+            self.__get = self._scraper_monitor(
+                self._create_request_wrapper(self.scraper.get))
+            self.__post = self._scraper_monitor(
+                self._create_request_wrapper(self.scraper.post))
+            self.__head = self._scraper_monitor(
+                self._create_request_wrapper(self.scraper.head))
 
     def _scraper_monitor(self, func):
         """监控cloudscraper的工作状态，遇到不支持的Challenge时尝试退回常规的requests请求"""
@@ -64,39 +132,51 @@ class Request():
                 return func(*args, **kw)
             except Exception as e:
                 logger.debug(f"无法通过CloudFlare检测: '{e}', 尝试退回常规的requests请求")
+                # 在退回时也要考虑SSL验证设置
                 if func == self.scraper.get:
-                    return requests.get(*args, **kw)
+                    return requests.get(*args, verify=ssl_verify, **kw)
                 else:
-                    return requests.post(*args, **kw)
+                    return requests.post(*args, verify=ssl_verify, **kw)
+        return wrapper
+
+    def _create_request_wrapper(self, original_func):
+        """创建请求包装器以支持SSL验证配置"""
+        def wrapper(*args, **kwargs):
+            # 确保请求使用当前的SSL验证设置
+            kwargs.setdefault('verify', ssl_verify)
+            return original_func(*args, **kwargs)
         return wrapper
 
     def get(self, url, delay_raise=False):
         r = self.__get(url,
-                      headers=self.headers,
-                      proxies=self.proxies,
-                      cookies=self.cookies,
-                      timeout=self.timeout)
+                       headers=self.headers,
+                       proxies=self.proxies,
+                       cookies=self.cookies,
+                       timeout=self.timeout,
+                       verify=ssl_verify)
         if not delay_raise:
             r.raise_for_status()
         return r
 
     def post(self, url, data, delay_raise=False):
         r = self.__post(url,
-                      data=data,
-                      headers=self.headers,
-                      proxies=self.proxies,
-                      cookies=self.cookies,
-                      timeout=self.timeout)
+                        data=data,
+                        headers=self.headers,
+                        proxies=self.proxies,
+                        cookies=self.cookies,
+                        timeout=self.timeout,
+                        verify=ssl_verify)
         if not delay_raise:
             r.raise_for_status()
         return r
 
     def head(self, url, delay_raise=True):
         r = self.__head(url,
-                      headers=self.headers,
-                      proxies=self.proxies,
-                      cookies=self.cookies,
-                      timeout=self.timeout)
+                        headers=self.headers,
+                        proxies=self.proxies,
+                        cookies=self.cookies,
+                        timeout=self.timeout,
+                        verify=ssl_verify)
         if not delay_raise:
             r.raise_for_status()
         return r
@@ -114,12 +194,44 @@ class DownloadProgressBar(tqdm):
         self.update(b * bsize - self.n)
 
 
-def request_get(url, cookies={}, timeout=None, delay_raise=False):
+# 创建全局会话对象以支持连接池
+def _create_global_session():
+    session = requests.Session()
+
+    # 获取配置
+    config = Cfg().network
+
+    # 配置重试策略
+    retry_strategy = Retry(
+        total=config.retry_total,
+        backoff_factor=config.retry_backoff_factor,
+        status_forcelist=config.retry_status_forcelist,
+    )
+    adapter = HTTPAdapter(
+        pool_connections=config.pool_connections,  # 连接池数量
+        pool_maxsize=config.pool_maxsize,          # 最大连接数
+        pool_block=config.pool_block,              # 是否阻塞等待连接
+        max_retries=retry_strategy
+    )
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
+
+
+_global_session = _create_global_session()
+
+
+def request_get(url, cookies={}, timeout=None, delay_raise=False, verify_ssl=None):
     """获取指定url的原始请求"""
     if timeout is None:
         timeout = Cfg().network.timeout.seconds
-    
-    r = requests.get(url, headers=headers, proxies=read_proxy(), cookies=cookies, timeout=timeout)
+
+    # 使用全局SSL验证设置，除非特别指定了
+    if verify_ssl is None:
+        verify_ssl = ssl_verify
+
+    r = _global_session.get(url, headers=headers, proxies=read_proxy(),
+                            cookies=cookies, timeout=timeout, verify=verify_ssl)
     if not delay_raise:
         if r.status_code == 403 and b'>Just a moment...<' in r.content:
             raise SiteBlocked(f"403 Forbidden: 无法通过CloudFlare检测: {url}")
@@ -128,11 +240,17 @@ def request_get(url, cookies={}, timeout=None, delay_raise=False):
     return r
 
 
-def request_post(url, data, cookies={}, timeout=None, delay_raise=False):
+def request_post(url, data, cookies={}, timeout=None, delay_raise=False, verify_ssl=None):
     """向指定url发送post请求"""
     if timeout is None:
         timeout = Cfg().network.timeout.seconds
-    r = requests.post(url, data=data, headers=headers, proxies=read_proxy(), cookies=cookies, timeout=timeout)
+
+    # 使用全局SSL验证设置，除非特别指定了
+    if verify_ssl is None:
+        verify_ssl = ssl_verify
+
+    r = _global_session.post(url, data=data, headers=headers, proxies=read_proxy(
+    ), cookies=cookies, timeout=timeout, verify=verify_ssl)
     if not delay_raise:
         r.raise_for_status()
     return r
@@ -156,7 +274,8 @@ def get_html(url, encoding='utf-8'):
     # 清理功能仅应在需要的时候用来调试网页（如prestige），否则可能反过来影响调试（如JavBus）
     # html = cleaner.clean_html(html)
     if hasattr(sys, 'javsp_debug_mode'):
-        lxml.html.open_in_browser(html, encoding=encoding)  # for develop and debug
+        # for develop and debug
+        lxml.html.open_in_browser(html, encoding=encoding)
     return html
 
 
@@ -167,7 +286,8 @@ def resp2html(resp, encoding='utf-8') -> lxml.html.HtmlComment:
     html.make_links_absolute(resp.url, resolve_base_href=True)
     # html = cleaner.clean_html(html)
     if hasattr(sys, 'javsp_debug_mode'):
-        lxml.html.open_in_browser(html, encoding=encoding)  # for develop and debug
+        # for develop and debug
+        lxml.html.open_in_browser(html, encoding=encoding)
     return html
 
 
@@ -201,7 +321,8 @@ def dump_xpath_node(node, filename=None):
 def is_connectable(url, timeout=3):
     """测试与指定url的连接"""
     try:
-        r = requests.get(url, headers=headers, timeout=timeout)
+        r = _global_session.get(url, headers=headers,
+                                timeout=timeout, verify=ssl_verify)
         return True
     except requests.exceptions.RequestException as e:
         logger.debug(f"Not connectable: {url}\n" + repr(e))
@@ -213,8 +334,8 @@ def urlretrieve(url, filename=None, reporthook=None, headers=None):
         headers["Referer"] = "https://www.arzon.jp/"
     """使用requests实现urlretrieve"""
     # https://blog.csdn.net/qq_38282706/article/details/80253447
-    with contextlib.closing(requests.get(url, headers=headers,
-                                         proxies=read_proxy(), stream=True)) as r:
+    with contextlib.closing(_global_session.get(url, headers=headers,
+                                                proxies=read_proxy(), stream=True, verify=ssl_verify)) as r:
         header = r.headers
         with open(filename, 'wb+') as fp:
             bs = 1024
@@ -249,7 +370,8 @@ def download(url, output_path, desc=None):
     referrer['referer'] = url[:url.find('/', 8)+1]  # 提取base_url部分
     with DownloadProgressBar(unit='B', unit_scale=True,
                              miniters=1, desc=desc, leave=False) as t:
-        urlretrieve(url, filename=output_path, reporthook=t.update_to, headers=referrer)
+        urlretrieve(url, filename=output_path,
+                    reporthook=t.update_to, headers=referrer)
         info = {k: t.format_dict[k] for k in ('total', 'elapsed', 'rate')}
         return info
 
@@ -258,9 +380,10 @@ def open_in_chrome(url, new=0, autoraise=True):
     """使用指定的Chrome Profile打开url，便于调试"""
     import subprocess
     chrome = R'C:\Program Files\Google\Chrome\Application\chrome.exe'
-    subprocess.run(f'"{chrome}" --profile-directory="Profile 2" {url}', shell=True)
+    subprocess.run(
+        f'"{chrome}" --profile-directory="Profile 2" {url}', shell=True)
 
-import webbrowser
+
 webbrowser.open = open_in_chrome
 
 
