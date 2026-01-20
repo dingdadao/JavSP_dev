@@ -17,10 +17,6 @@ from lxml.html.clean import Cleaner
 from requests.models import Response
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-import urllib3
-
-# 禁用SSL警告
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 __all__ = ['Request', 'get_html', 'post_html', 'request_get', 'resp2html',
@@ -33,8 +29,6 @@ headers = {
 
 # SSL验证设置
 ssl_verify = Cfg().network.ssl_verification
-# 强制跳过SSL验证以解决EOF错误
-ssl_verify = False
 
 logger = logging.getLogger(__name__)
 # 删除js脚本相关的tag，避免网页检测到没有js运行环境时强行跳转，影响调试
@@ -121,20 +115,19 @@ class Request():
                          'platform': 'windows', 'mobile': False},
                 sess=self.session  # 使用自定义会话
             )
-            # 强制跳过SSL验证以解决EOF错误
-            self.scraper.verify = False
+            # 设置SSL验证，针对特定SSL错误进行处理
+            self.scraper.verify = ssl_verify
             # 设置更宽松的SSL上下文以处理特定SSL错误
-            import ssl
-            try:
-                # 尝试设置更宽松的SSL上下文
-                ctx = ssl.create_default_context()
-                ctx.check_hostname = False
-                ctx.verify_mode = ssl.CERT_NONE
-                # 针对特定SSL错误进行额外配置
-                ctx.set_ciphers('DEFAULT@SECLEVEL=1')
-                self.scraper.ssl_context = ctx
-            except:
-                pass
+            if not ssl_verify:
+                import ssl
+                try:
+                    # 尝试设置更宽松的SSL上下文
+                    ctx = ssl.create_default_context()
+                    ctx.check_hostname = False
+                    ctx.verify_mode = ssl.CERT_NONE
+                    self.scraper.ssl_context = ctx
+                except:
+                    pass
             self.__get = self._scraper_monitor(
                 self._create_request_wrapper(self.scraper.get))
             self.__post = self._scraper_monitor(
@@ -262,41 +255,14 @@ def _create_global_session():
         backoff_factor=config.retry_backoff_factor,
         status_forcelist=config.retry_status_forcelist,
     )
-
-    import ssl
-    try:
-        # 创建自定义的HTTPS适配器，跳过SSL验证
-        class CustomHTTPSAdapter(HTTPAdapter):
-            def init_poolmanager(self, *args, **kwargs):
-                kwargs['assert_hostname'] = False
-                kwargs['cert_reqs'] = ssl.CERT_NONE
-                return super().init_poolmanager(*args, **kwargs)
-
-        adapter_http = HTTPAdapter(
-            pool_connections=config.pool_connections,  # 连接池数量
-            pool_maxsize=config.pool_maxsize,          # 最大连接数
-            pool_block=config.pool_block,              # 是否阻塞等待连接
-            max_retries=retry_strategy
-        )
-        adapter_https = CustomHTTPSAdapter(
-            pool_connections=config.pool_connections,  # 连接池数量
-            pool_maxsize=config.pool_maxsize,          # 最大连接数
-            pool_block=config.pool_block,              # 是否阻塞等待连接
-            max_retries=retry_strategy
-        )
-
-        session.mount("http://", adapter_http)
-        session.mount("https://", adapter_https)
-    except:
-        # 如果自定义适配器失败，使用默认适配器
-        adapter = HTTPAdapter(
-            pool_connections=config.pool_connections,  # 连接池数量
-            pool_maxsize=config.pool_maxsize,          # 最大连接数
-            pool_block=config.pool_block,              # 是否阻塞等待连接
-            max_retries=retry_strategy
-        )
-        session.mount("http://", adapter)
-        session.mount("https://", adapter)
+    adapter = HTTPAdapter(
+        pool_connections=config.pool_connections,  # 连接池数量
+        pool_maxsize=config.pool_maxsize,          # 最大连接数
+        pool_block=config.pool_block,              # 是否阻塞等待连接
+        max_retries=retry_strategy
+    )
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
 
     return session
 
@@ -309,12 +275,10 @@ def request_get(url, cookies={}, timeout=None, delay_raise=False, verify_ssl=Non
     if timeout is None:
         timeout = Cfg().network.timeout.seconds
 
-    # 强制跳过SSL验证以解决EOF错误
-    verify_ssl = False
+    # 使用全局SSL验证设置，除非特别指定了
+    if verify_ssl is None:
+        verify_ssl = ssl_verify
 
-    # 禁用SSL警告
-    import urllib3
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     r = _global_session.get(url, headers=headers, proxies=read_proxy(),
                             cookies=cookies, timeout=timeout, verify=verify_ssl)
     if not delay_raise:
@@ -330,12 +294,10 @@ def request_post(url, data, cookies={}, timeout=None, delay_raise=False, verify_
     if timeout is None:
         timeout = Cfg().network.timeout.seconds
 
-    # 强制跳过SSL验证以解决EOF错误
-    verify_ssl = False
+    # 使用全局SSL验证设置，除非特别指定了
+    if verify_ssl is None:
+        verify_ssl = ssl_verify
 
-    # 禁用SSL警告
-    import urllib3
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     r = _global_session.post(url, data=data, headers=headers, proxies=read_proxy(
     ), cookies=cookies, timeout=timeout, verify=verify_ssl)
     if not delay_raise:
@@ -408,9 +370,8 @@ def dump_xpath_node(node, filename=None):
 def is_connectable(url, timeout=3):
     """测试与指定url的连接"""
     try:
-        # 强制跳过SSL验证
         r = _global_session.get(url, headers=headers,
-                                timeout=timeout, verify=False)
+                                timeout=timeout, verify=ssl_verify)
         return True
     except requests.exceptions.RequestException as e:
         logger.debug(f"Not connectable: {url}\n" + repr(e))
@@ -423,7 +384,7 @@ def urlretrieve(url, filename=None, reporthook=None, headers=None):
     """使用requests实现urlretrieve"""
     # https://blog.csdn.net/qq_38282706/article/details/80253447
     with contextlib.closing(_global_session.get(url, headers=headers,
-                                                proxies=read_proxy(), stream=True, verify=False)) as r:
+                                                proxies=read_proxy(), stream=True, verify=ssl_verify)) as r:
         header = r.headers
         with open(filename, 'wb+') as fp:
             bs = 1024

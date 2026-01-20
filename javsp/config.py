@@ -49,7 +49,7 @@ class Network(BaseConfig):
     retry: NonNegativeInt = 3
     timeout: Duration
     proxy_free: Dict[CrawlerID, Url]
-    ssl_verification: bool = False
+    ssl_verification: bool = True
     # 连接池配置
     pool_connections: int = 20
     pool_maxsize: int = 20

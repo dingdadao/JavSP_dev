@@ -35,14 +35,46 @@ def parse_data(movie: MovieInfo):
     if page_title and page_title[0].startswith('404 Page Not Found!'):
         raise MovieNotFoundError(__name__, movie.dvdid)
 
-    container = html.xpath("//div[@class='container']")[0]
-    title = container.xpath("h3/text()")[0]
-    cover = container.xpath("//a[@class='bigImage']/img/@src")[0]
+    containers = html.xpath("//div[@class='container']")
+    if not containers:
+        # 如果找不到容器元素，检查是否是页面结构变化或访问受限
+        title = html.xpath('/html/head/title/text()')
+        if title and 'Just a moment...' in title[0]:
+            raise SiteBlocked(f"JavBus: 触发了CloudFlare保护 {url}")
+        elif title and title[0].startswith('404'):
+            raise MovieNotFoundError(__name__, movie.dvdid)
+        else:
+            raise WebsiteError(f"JavBus: 页面结构异常，无法找到容器元素 {url}")
+    container = containers[0]
+    title_elements = container.xpath("h3/text()")
+    if not title_elements:
+        raise WebsiteError(f"JavBus: 无法获取标题 {url}")
+    title = title_elements[0]
+
+    cover_elements = container.xpath("//a[@class='bigImage']/img/@src")
+    if not cover_elements:
+        raise WebsiteError(f"JavBus: 无法获取封面 {url}")
+    cover = cover_elements[0]
+
     preview_pics = container.xpath("//div[@id='sample-waterfall']/a/@href")
-    info = container.xpath("//div[@class='col-md-3 info']")[0]
-    dvdid = info.xpath("p/span[text()='識別碼:']")[0].getnext().text
-    publish_date = info.xpath("p/span[text()='發行日期:']")[0].tail.strip()
-    duration = info.xpath("p/span[text()='長度:']")[0].tail.replace('分鐘', '').strip()
+    info_elements = container.xpath("//div[@class='col-md-3 info']")
+    if not info_elements:
+        raise WebsiteError(f"JavBus: 无法找到信息框 {url}")
+    info = info_elements[0]
+
+    dvdid_elements = info.xpath("p/span[text()='識別碼:']")
+    if not dvdid_elements:
+        raise WebsiteError(f"JavBus: 无法找到DVD ID {url}")
+    dvdid = dvdid_elements[0].getnext().text
+    publish_date_elements = info.xpath("p/span[text()='發行日期:']")
+    if not publish_date_elements:
+        raise WebsiteError(f"JavBus: 无法找到发布日期 {url}")
+    publish_date = publish_date_elements[0].tail.strip()
+
+    duration_elements = info.xpath("p/span[text()='長度:']")
+    if not duration_elements:
+        raise WebsiteError(f"JavBus: 无法找到时长 {url}")
+    duration = duration_elements[0].tail.replace('分鐘', '').strip()
     director_tag = info.xpath("p/span[text()='導演:']")
     if director_tag:    # xpath没有匹配时将得到空列表
         movie.director = director_tag[0].getnext().text.strip()
