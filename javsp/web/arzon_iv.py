@@ -9,9 +9,14 @@ from javsp.web.exceptions import *
 from javsp.datatype import MovieInfo
 import requests
 from lxml import html
+import urllib3
+
+# 禁用SSL警告
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = logging.getLogger(__name__)
 base_url = "https://www.arzon.jp"
+
 
 def get_cookie():
     # https://www.arzon.jp/index.php?action=adult_customer_agecheck&agecheck=1&redirect=https%3A%2F%2Fwww.arzon.jp%2F
@@ -20,6 +25,7 @@ def get_cookie():
     session.get(skip_verify_url, timeout=(12, 7))
     return session.cookies.get_dict()
 
+
 def parse_data(movie: MovieInfo):
     """解析指定番号的影片数据"""
     full_id = movie.dvdid
@@ -27,7 +33,7 @@ def parse_data(movie: MovieInfo):
     url = f'{base_url}/imagelist.html?q={full_id}'
     r = request_get(url, cookies, delay_raise=True)
     if r.status_code == 404:
-      raise MovieNotFoundError(__name__, movie.dvdid)
+        raise MovieNotFoundError(__name__, movie.dvdid)
     # https://stackoverflow.com/questions/15830421/xml-unicode-strings-with-encoding-declaration-are-not-supported
     data = html.fromstring(r.content)
 
@@ -37,7 +43,7 @@ def parse_data(movie: MovieInfo):
 
     item_url = base_url + urls[0]
     e = request_get(item_url, cookies, delay_raise=True)
-    item =  html.fromstring(e.content)
+    item = html.fromstring(e.content)
 
     title = item.xpath("//div[@class='detail_title_new']//h1/text()")[0]
     cover = item.xpath("//td[@align='center']//a/img/@src")[0]
@@ -46,39 +52,41 @@ def parse_data(movie: MovieInfo):
 
     container = item.xpath("//div[@class='item_register']/table//tr")
     for row in container:
-      key = row.xpath("./td[1]/text()")[0]
-      contents = row.xpath("./td[2]//text()")
-      content = [item.strip() for item in contents if item.strip() != '']
-      index = 0
-      value = content[index] if content and index < len(content) else None
-      if key == "タレント：":
-        movie.actress = content
-      if key == "イメージメーカー：":
-        movie.producer = value
-      if key == "イメージレーベル：":
-        video_type = value
-      if key == "監督：":
-        movie.director = value
-      if key == "発売日：" and value:
-        movie.publish_date = re.search(r"\d{4}/\d{2}/\d{2}", value).group(0).replace("/", "-")
-      if key == "収録時間：" and value:
-        movie.duration = re.search(r'([\d.]+)分', value).group(1)
-      if key == "品番：":
-        dvd_id = value
-      elif key == "タグ：":
-        genre  = value
+        key = row.xpath("./td[1]/text()")[0]
+        contents = row.xpath("./td[2]//text()")
+        content = [item.strip() for item in contents if item.strip() != '']
+        index = 0
+        value = content[index] if content and index < len(content) else None
+        if key == "タレント：":
+            movie.actress = content
+        if key == "イメージメーカー：":
+            movie.producer = value
+        if key == "イメージレーベル：":
+            video_type = value
+        if key == "監督：":
+            movie.director = value
+        if key == "発売日：" and value:
+            movie.publish_date = re.search(
+                r"\d{4}/\d{2}/\d{2}", value).group(0).replace("/", "-")
+        if key == "収録時間：" and value:
+            movie.duration = re.search(r'([\d.]+)分', value).group(1)
+        if key == "品番：":
+            dvd_id = value
+        elif key == "タグ：":
+            genre = value
 
     genres = ''
     if video_type:
-      genres = [video_type]
-    if(genre != None):
-      genres.append(genre)
+        genres = [video_type]
+    if (genre != None):
+        genres.append(genre)
 
     movie.genre = genres
     movie.url = item_url
     movie.title = title
     movie.plot = plot
     movie.cover = f'https:{cover}'
+
 
 if __name__ == "__main__":
     import pretty_errors

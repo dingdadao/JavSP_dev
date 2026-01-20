@@ -9,6 +9,10 @@ import logging
 from typing import Dict, List
 from tqdm import tqdm
 import requests
+import urllib3
+
+# 禁用SSL警告
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 logger = logging.getLogger(__name__)
@@ -62,7 +66,7 @@ class CrawlerManager:
                     if isinstance(tqdm_bar, tqdm):
                         tqdm_bar.set_description(f'{crawler_name}: SSL错误，正在重试')
                 except requests.exceptions.ConnectionError as e:
-                    logger.warning(f'{crawler_name}: 连接错误: {repr(e)}')
+                    logger.debug(f'{crawler_name}: 连接错误: {repr(e)}')
                     logger.debug(
                         f'{crawler_name}: 连接错误，正在重试 ({cnt+1}/{retry}): \n{repr(e)}')
                     if isinstance(tqdm_bar, tqdm):
@@ -73,7 +77,7 @@ class CrawlerManager:
                     if isinstance(tqdm_bar, tqdm):
                         tqdm_bar.set_description(f'{crawler_name}: 网络错误，正在重试')
                 except Exception as e:
-                    logger.exception(e)
+                    logger.debug(f'{crawler_name}: 发生未预期错误: {str(e)}')
             else:
                 # 如果所有重试都失败，恢复SSL验证设置
                 if retry > 0:

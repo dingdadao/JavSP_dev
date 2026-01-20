@@ -1,17 +1,20 @@
+from javsp.chromium import get_browsers_cookies
+from javsp.datatype import MovieInfo, GenreMap
+from javsp.config import Cfg, CrawlerID
+from javsp.avid import guess_av_type
+from javsp.func import *
+from javsp.web.exceptions import *
+from javsp.web.base import Request, resp2html
 import os
 import re
 import time
 import random
 import logging
 import json
+import urllib3
 
-from javsp.web.base import Request, resp2html
-from javsp.web.exceptions import *
-from javsp.func import *
-from javsp.avid import guess_av_type
-from javsp.config import Cfg, CrawlerID
-from javsp.datatype import MovieInfo, GenreMap
-from javsp.chromium import get_browsers_cookies
+# 禁用SSL警告
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 logger = logging.getLogger(__name__)
@@ -100,8 +103,9 @@ def get_html_wrapper(url):
         html = resp2html(response)
         return html
     except Exception as e:
-        logger.error(f"HTML 解析失败: {e}")
-        raise
+        logger.debug(f"HTML 解析失败: {e}")
+        from javsp.web.exceptions import MovieNotFoundError
+        raise MovieNotFoundError(__name__, url, f"HTML解析失败: {e}")
 
 
 def get_user_info(site, cookies):

@@ -17,6 +17,10 @@ from lxml.html.clean import Cleaner
 from requests.models import Response
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+import urllib3
+
+# 禁用SSL警告
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 __all__ = ['Request', 'get_html', 'post_html', 'request_get', 'resp2html',

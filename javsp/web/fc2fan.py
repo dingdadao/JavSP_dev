@@ -1,16 +1,18 @@
 """解析fc2fan本地镜像的数据"""
 # FC2官网的影片下架就无法再抓取数据，如果用户有fc2fan的镜像，那可以尝试从镜像中解析影片数据
+from javsp.datatype import MovieInfo
+from javsp.config import Cfg
+from javsp.web.exceptions import *
+from javsp.web.base import resp2html
 import os
 import re
 import logging
 import lxml.html
 import requests
+import urllib3
 
-
-from javsp.web.base import resp2html
-from javsp.web.exceptions import *
-from javsp.config import Cfg
-from javsp.datatype import MovieInfo
+# 禁用SSL警告
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 logger = logging.getLogger(__name__)
@@ -41,7 +43,7 @@ def parse_data(movie: MovieInfo):
     score_str = container.xpath("h5/strong[text()='影片评分']")[0].tail.strip()
     match = re.search(r'\d+', score_str)
     if match:
-        score = int(match.group()) / 10 # fc2fan站长是按100分来打分的
+        score = int(match.group()) / 10  # fc2fan站长是按100分来打分的
         movie.score = f'{score:.1f}'
     resource_info = container.xpath("h5/strong[text()='资源参数']")[0].tail
     if '无码' in resource_info:
@@ -56,7 +58,8 @@ def parse_data(movie: MovieInfo):
     actress = container.xpath("h5/strong[text()='女优名字']/../a/text()")
     preview_pics = container.xpath("//ul[@class='slides']/li/img/@src")
     if use_local_mirror:
-        preview_pics = [os.path.normpath(os.path.join(base_path, i)) for i in preview_pics]
+        preview_pics = [os.path.normpath(
+            os.path.join(base_path, i)) for i in preview_pics]
     # big_preview = container.xpath("//img[@id='thumbpic']/../@href")[0]    # 影片真实截图，目前暂时用不到
 
     movie.title = title
