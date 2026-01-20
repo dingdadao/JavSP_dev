@@ -48,13 +48,14 @@ def retry_request(url, max_retries=3, delay=3):
                 if error_code == '1020':
                     raise SiteBlocked(f'禁止访问: 站点屏蔽了来自日本地区的IP')
                 else:
-                    raise SiteBlocked(f'禁止访问，状态码: {response.status_code}，错误码: {error_code}')
+                    raise SiteBlocked(
+                        f'禁止访问，状态码: {response.status_code}，错误码: {error_code}')
             else:
                 raise WebsiteError(f'非预期状态码: {response.status_code}')
         except Exception as e:
-            logger.warning(f"请求失败，第{attempt + 1}次重试，错误: {e}")
+            logger.debug(f"请求失败，第{attempt + 1}次重试，错误: {e}")
             time.sleep(delay)
-    raise WebsiteError(f"请求失败，超过最大重试次数: {url}")
+    raise MovieNotFoundError(__name__, url, f"超过最大重试次数")
 
 
 def get_html_wrapper(url):
@@ -81,8 +82,10 @@ def get_html_wrapper(url):
         response = request.get(url)
         # print(response.text)
     except Exception as e:
-        logger.error(f"请求失败: {url}，错误: {e}")
-        raise
+        logger.debug(f"请求失败: {url}，错误: {e}")
+        # 不要直接抛出原始异常，而是转换为更标准的错误类型
+        from javsp.web.exceptions import MovieNotFoundError
+        raise MovieNotFoundError(__name__, url, f"请求失败: {e}")
 
     # 登录重定向检测
     if response.history and '/login' in response.url:
@@ -90,7 +93,8 @@ def get_html_wrapper(url):
 
     # VIP资源页面检测
     if response.history and 'pay' in response.url.split('/')[-1]:
-        raise SitePermissionError(f"JavDB: 资源仅 VIP 可见: '{response.history[0].url}'")
+        raise SitePermissionError(
+            f"JavDB: 资源仅 VIP 可见: '{response.history[0].url}'")
 
     try:
         html = resp2html(response)
@@ -98,7 +102,6 @@ def get_html_wrapper(url):
     except Exception as e:
         logger.error(f"HTML 解析失败: {e}")
         raise
-
 
 
 def get_user_info(site, cookies):
@@ -111,8 +114,10 @@ def get_user_info(site, cookies):
         return None
 
     if 'JavDB' in html.text:
-        email = html.xpath("//div[@class='user-profile']/ul/li[1]/span/following-sibling::text()")[0].strip()
-        username = html.xpath("//div[@class='user-profile']/ul/li[2]/span/following-sibling::text()")[0].strip()
+        email = html.xpath(
+            "//div[@class='user-profile']/ul/li[1]/span/following-sibling::text()")[0].strip()
+        username = html.xpath(
+            "//div[@class='user-profile']/ul/li[2]/span/following-sibling::text()")[0].strip()
         return email, username
     else:
         logger.debug('域名已过期: ' + site)
@@ -130,15 +135,18 @@ def get_valid_cookies():
             logger.debug(f"{item['profile']}, {item['site']} Cookies无效")
     return None
 
+
 def normalize_id(s):
     return s.strip().lower().replace(' ', '').replace('\u3000', '')
+
 
 def parse_data(movie: MovieInfo):
     """抓取并解析指定番号的影片信息"""
     html = get_html_wrapper(f'{base_url}/search?q={movie.dvdid}&f=all')
     logger.info(f"{base_url}/search?q={movie.dvdid}&f=all")
     # print(html.text_content())
-    ids = [i.lower() for i in html.xpath("//div[@class='video-title']/strong/text()")]
+    ids = [i.lower() for i in html.xpath(
+        "//div[@class='video-title']/strong/text()")]
     movie_urls = html.xpath("//a[@class='box']/@href")
     target_id = normalize_id(movie.dvdid)
     matches = [i for i in ids if i == target_id]
@@ -167,29 +175,41 @@ def parse_data(movie: MovieInfo):
         movie.publish_date = box.xpath("div[@class='meta']/text()")[0].strip()
         return
 
-    container = html2.xpath("/html/body/section/div/div[@class='video-detail']")[0]
+    container = html2.xpath(
+        "/html/body/section/div/div[@class='video-detail']")[0]
     info = container.xpath("//nav[@class='panel movie-panel-info']")[0]
 
     movie.dvdid = info.xpath("div/span")[0].text_content()
     movie.url = new_url.replace(base_url, permanent_url)
-    movie.title = container.xpath("h2/strong[@class='current-title']/text()")[0].replace(movie.dvdid, '').strip()
-    movie.ori_title = container.xpath("h2/span[@class='origin-title']/text()")[0] if container.xpath("//a[contains(@class, 'meta-link') and not(contains(@style, 'display: none'))]") else None
+    movie.title = container.xpath(
+        "h2/strong[@class='current-title']/text()")[0].replace(movie.dvdid, '').strip()
+    movie.ori_title = container.xpath("h2/span[@class='origin-title']/text()")[0] if container.xpath(
+        "//a[contains(@class, 'meta-link') and not(contains(@style, 'display: none'))]") else None
     movie.cover = container.xpath("//img[@class='video-cover']/@src")[0]
-    movie.preview_pics = container.xpath("//a[@class='tile-item'][@data-fancybox='gallery']/@href")
-    preview_video_tag = container.xpath("//video[@id='preview-video']/source/@src")
+    movie.preview_pics = container.xpath(
+        "//a[@class='tile-item'][@data-fancybox='gallery']/@href")
+    preview_video_tag = container.xpath(
+        "//video[@id='preview-video']/source/@src")
     if preview_video_tag:
-        movie.preview_video = preview_video_tag[0] if not preview_video_tag[0].startswith('//') else 'https:' + preview_video_tag[0]
+        movie.preview_video = preview_video_tag[0] if not preview_video_tag[0].startswith(
+            '//') else 'https:' + preview_video_tag[0]
 
-    movie.publish_date = info.xpath("div/strong[text()='日期:']")[0].getnext().text
-    movie.duration = info.xpath("div/strong[text()='時長:']")[0].getnext().text.replace('分鍾', '').strip()
-    movie.director = info.xpath("div/strong[text()='導演:']")[0].getnext().text_content().strip() if info.xpath("div/strong[text()='導演:']") else None
+    movie.publish_date = info.xpath(
+        "div/strong[text()='日期:']")[0].getnext().text
+    movie.duration = info.xpath(
+        "div/strong[text()='時長:']")[0].getnext().text.replace('分鍾', '').strip()
+    movie.director = info.xpath("div/strong[text()='導演:']")[0].getnext(
+    ).text_content().strip() if info.xpath("div/strong[text()='導演:']") else None
 
     av_type = guess_av_type(movie.dvdid)
-    producer_tag = info.xpath("div/strong[text()='片商:']")[0].getnext().text_content().strip() if av_type != 'fc2' else info.xpath("div/strong[text()='賣家:']")[0].getnext().text_content().strip()
+    producer_tag = info.xpath("div/strong[text()='片商:']")[0].getnext().text_content().strip(
+    ) if av_type != 'fc2' else info.xpath("div/strong[text()='賣家:']")[0].getnext().text_content().strip()
     movie.producer = producer_tag if producer_tag else None
 
-    movie.publisher = info.xpath("div/strong[text()='發行:']")[0].getnext().text_content().strip() if info.xpath("div/strong[text()='發行:']") else None
-    movie.serial = info.xpath("div/strong[text()='系列:']")[0].getnext().text_content().strip() if info.xpath("div/strong[text()='系列:']") else None
+    movie.publisher = info.xpath("div/strong[text()='發行:']")[0].getnext(
+    ).text_content().strip() if info.xpath("div/strong[text()='發行:']") else None
+    movie.serial = info.xpath("div/strong[text()='系列:']")[0].getnext(
+    ).text_content().strip() if info.xpath("div/strong[text()='系列:']") else None
 
     score_tag = html2.xpath("//span[@class='score-stars']")
     if score_tag:
@@ -204,7 +224,8 @@ def parse_data(movie: MovieInfo):
         pre_id = tag.get('href').split('/')[-1]
         genre.append(tag.text)
         genre_id.append(pre_id)
-        movie.uncensored = {'uncensored': True, 'tags': False}.get(pre_id.split('?')[0])
+        movie.uncensored = {'uncensored': True,
+                            'tags': False}.get(pre_id.split('?')[0])
 
     movie.genre = genre
     movie.genre_id = genre_id
@@ -216,7 +237,8 @@ def parse_data(movie: MovieInfo):
     actress = [a for a in all_actors if genders[all_actors.index(a)] == '♀']
     movie.actress = actress
 
-    magnet = container.xpath("//div[@class='magnet-name column is-four-fifths']/a/@href")
+    magnet = container.xpath(
+        "//div[@class='magnet-name column is-four-fifths']/a/@href")
     movie.magnet = [m.replace('[javdb.com]', '') for m in magnet]
 
 
@@ -257,7 +279,8 @@ def fetch_actor_alias(actor_url: str, use_original: bool):
     names_list = [name.strip() for name in names_span.text.split(",")]
     aliases_list = []
     if len(aliases_span_list) > 1:
-        aliases_list = [alias.strip() for alias in aliases_span_list[0].text.split(",")]
+        aliases_list = [alias.strip()
+                        for alias in aliases_span_list[0].text.split(",")]
 
     key_name = names_list[-1 if use_original else 0]
     return key_name, names_list + aliases_list
@@ -286,7 +309,8 @@ def collect_actress_alias(type_: int = 0, use_original: bool = True):
             actor_url = actor.xpath("@href")[0]
 
             try:
-                key_name, all_names = fetch_actor_alias(actor_url, use_original)
+                key_name, all_names = fetch_actor_alias(
+                    actor_url, use_original)
                 actress_alias_map[key_name] = all_names
                 logger.info(f"爬取女优: {key_name} 别名: {all_names}")
             except Exception as e:
@@ -300,7 +324,8 @@ def collect_actress_alias(type_: int = 0, use_original: bool = True):
 
             time.sleep(max(1, random.uniform(1, 10)))
 
-        next_page_link = html.xpath("//a[@rel='next' and @class='pagination-next']/@href")
+        next_page_link = html.xpath(
+            "//a[@rel='next' and @class='pagination-next']/@href")
         if not next_page_link:
             break
         page_url = next_page_link[0]

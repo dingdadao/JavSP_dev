@@ -52,7 +52,7 @@ network:
   proxy_free:
     avsox: "https://avsox.click"
     javbus: "https://www.seedmm.help"
-    javdb: "https://javdb565.com"
+    javdb: "https://javdb.com"
     javlib: "https://www.y78k.com"
   # 网络问题导致抓取数据失败时的重试次数，通常3次就差不多了
   retry: 3
