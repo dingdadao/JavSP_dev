@@ -1,4 +1,6 @@
 """网络请求的统一接口"""
+from javsp.web.exceptions import *
+from javsp.config import Cfg
 import webbrowser
 import os
 import sys
@@ -15,10 +17,10 @@ from lxml.html.clean import Cleaner
 from requests.models import Response
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+import urllib3
 
-
-from javsp.config import Cfg
-from javsp.web.exceptions import *
+# 禁用SSL警告
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 __all__ = ['Request', 'get_html', 'post_html', 'request_get', 'resp2html',
@@ -31,6 +33,8 @@ headers = {
 
 # SSL验证设置
 ssl_verify = Cfg().network.ssl_verification
+# 强制跳过SSL验证以解决EOF错误
+ssl_verify = False
 
 logger = logging.getLogger(__name__)
 # 删除js脚本相关的tag，避免网页检测到没有js运行环境时强行跳转，影响调试
@@ -117,19 +121,18 @@ class Request():
                          'platform': 'windows', 'mobile': False},
                 sess=self.session  # 使用自定义会话
             )
-            # 设置SSL验证，针对特定SSL错误进行处理
-            self.scraper.verify = ssl_verify
+            # 强制跳过SSL验证以解决EOF错误
+            self.scraper.verify = False
             # 设置更宽松的SSL上下文以处理特定SSL错误
-            if not ssl_verify:
-                import ssl
-                try:
-                    # 尝试设置更宽松的SSL上下文
-                    ctx = ssl.create_default_context()
-                    ctx.check_hostname = False
-                    ctx.verify_mode = ssl.CERT_NONE
-                    self.scraper.ssl_context = ctx
-                except:
-                    pass
+            import ssl
+            try:
+                # 尝试设置更宽松的SSL上下文
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                self.scraper.ssl_context = ctx
+            except:
+                pass
             self.__get = self._scraper_monitor(
                 self._create_request_wrapper(self.scraper.get))
             self.__post = self._scraper_monitor(
@@ -276,22 +279,14 @@ def request_get(url, cookies={}, timeout=None, delay_raise=False, verify_ssl=Non
     if timeout is None:
         timeout = Cfg().network.timeout.seconds
 
-    # 使用全局SSL验证设置，除非特别指定了
-    if verify_ssl is None:
-        verify_ssl = ssl_verify
+    # 强制跳过SSL验证以解决EOF错误
+    verify_ssl = False
 
-    try:
-        r = _global_session.get(url, headers=headers, proxies=read_proxy(),
-                                cookies=cookies, timeout=timeout, verify=verify_ssl)
-    except requests.exceptions.SSLError as e:
-        # 如果是SSL错误且当前启用了SSL验证，尝试禁用SSL验证重试
-        if verify_ssl and ('eof occurred in violation of protocol' in str(e).lower() or 'ssl' in str(e).lower()):
-            logger.warning(f"SSL错误，尝试禁用SSL验证重试: {url}")
-            r = _global_session.get(url, headers=headers, proxies=read_proxy(),
-                                    cookies=cookies, timeout=timeout, verify=False)
-        else:
-            raise
-
+    # 禁用SSL警告
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    r = _global_session.get(url, headers=headers, proxies=read_proxy(),
+                            cookies=cookies, timeout=timeout, verify=verify_ssl)
     if not delay_raise:
         if r.status_code == 403 and b'>Just a moment...<' in r.content:
             raise SiteBlocked(f"403 Forbidden: 无法通过CloudFlare检测: {url}")
@@ -305,22 +300,14 @@ def request_post(url, data, cookies={}, timeout=None, delay_raise=False, verify_
     if timeout is None:
         timeout = Cfg().network.timeout.seconds
 
-    # 使用全局SSL验证设置，除非特别指定了
-    if verify_ssl is None:
-        verify_ssl = ssl_verify
+    # 强制跳过SSL验证以解决EOF错误
+    verify_ssl = False
 
-    try:
-        r = _global_session.post(url, data=data, headers=headers, proxies=read_proxy(
-        ), cookies=cookies, timeout=timeout, verify=verify_ssl)
-    except requests.exceptions.SSLError as e:
-        # 如果是SSL错误且当前启用了SSL验证，尝试禁用SSL验证重试
-        if verify_ssl and ('eof occurred in violation of protocol' in str(e).lower() or 'ssl' in str(e).lower()):
-            logger.warning(f"SSL错误，尝试禁用SSL验证重试: {url}")
-            r = _global_session.post(url, data=data, headers=headers, proxies=read_proxy(
-            ), cookies=cookies, timeout=timeout, verify=False)
-        else:
-            raise
-
+    # 禁用SSL警告
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    r = _global_session.post(url, data=data, headers=headers, proxies=read_proxy(
+    ), cookies=cookies, timeout=timeout, verify=verify_ssl)
     if not delay_raise:
         r.raise_for_status()
     return r

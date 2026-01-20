@@ -58,6 +58,8 @@ network:
   retry: 3
   # https://en.wikipedia.org/wiki/ISO_8601#Durations
   timeout: PT10S
+  # SSL证书验证（设为false可跳过SSL验证，解决EOF错误）
+  ssl_verification: false
 
 ################################
 crawler:

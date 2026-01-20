@@ -1,15 +1,19 @@
 """爬虫管理器 - 负责并发抓取和数据汇总"""
+from javsp.web.base import set_ssl_verification
+from javsp.config import Cfg, CrawlerID
+from javsp.web.exceptions import *
+from javsp.datatype import Movie, MovieInfo
 import sys
 import threading
 import logging
 from typing import Dict, List
 from tqdm import tqdm
 import requests
+import urllib3
 
-from javsp.datatype import Movie, MovieInfo
-from javsp.web.exceptions import *
-from javsp.config import Cfg, CrawlerID
-from javsp.web.base import set_ssl_verification
+# 禁用SSL警告
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 
 logger = logging.getLogger(__name__)
 
