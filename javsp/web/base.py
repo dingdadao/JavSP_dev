@@ -115,9 +115,10 @@ class Request():
             self.scraper = cloudscraper.create_scraper(
                 browser={'browser': 'chrome',
                          'platform': 'windows', 'mobile': False},
-                requests_kwargs={'verify': ssl_verify},
-                session=self.session  # 使用自定义会话
+                sess=self.session  # 使用自定义会话
             )
+            # 设置SSL验证
+            self.scraper.verify = ssl_verify
             self.__get = self._scraper_monitor(
                 self._create_request_wrapper(self.scraper.get))
             self.__post = self._scraper_monitor(
@@ -128,12 +129,15 @@ class Request():
     def _scraper_monitor(self, func):
         """监控cloudscraper的工作状态，遇到不支持的Challenge时尝试退回常规的requests请求"""
         def wrapper(*args, **kw):
+            # 确保传递SSL验证设置
+            kw['verify'] = ssl_verify
             try:
                 return func(*args, **kw)
             except Exception as e:
                 logger.debug(f"无法通过CloudFlare检测: '{e}', 尝试退回常规的requests请求")
                 # 在退回时也要考虑SSL验证设置
-                if func == self.scraper.get:
+                # 根据函数名称判断是get还是post请求
+                if 'get' in str(func).lower():
                     return requests.get(*args, verify=ssl_verify, **kw)
                 else:
                     return requests.post(*args, verify=ssl_verify, **kw)
