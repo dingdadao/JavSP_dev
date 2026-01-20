@@ -197,7 +197,7 @@ class Request():
         except requests.exceptions.SSLError as e:
             # 如果是SSL错误，尝试禁用SSL验证重试
             if ssl_verify and ('eof occurred in violation of protocol' in str(e).lower() or 'ssl' in str(e).lower()):
-                logger.warning(f"SSL错误，尝试禁用SSL验证重试: {url}")
+                logger.debug(f"SSL错误，尝试禁用SSL验证重试: {url}")
                 if self.scraper is not None:
                     # 临时修改scraper的SSL验证设置
                     original_verify = self.scraper.verify
@@ -244,7 +244,7 @@ class Request():
         except requests.exceptions.SSLError as e:
             # 如果是SSL错误，尝试禁用SSL验证重试
             if ssl_verify and ('eof occurred in violation of protocol' in str(e).lower() or 'ssl' in str(e).lower()):
-                logger.warning(f"SSL错误，尝试禁用SSL验证重试: {url}")
+                logger.debug(f"SSL错误，尝试禁用SSL验证重试: {url}")
                 if self.scraper is not None:
                     # 临时修改scraper的SSL验证设置
                     original_verify = self.scraper.verify
@@ -291,7 +291,7 @@ class Request():
         except requests.exceptions.SSLError as e:
             # 如果是SSL错误，尝试禁用SSL验证重试
             if ssl_verify and ('eof occurred in violation of protocol' in str(e).lower() or 'ssl' in str(e).lower()):
-                logger.warning(f"SSL错误，尝试禁用SSL验证重试: {url}")
+                logger.debug(f"SSL错误，尝试禁用SSL验证重试: {url}")
                 if self.scraper is not None:
                     # 临时修改scraper的SSL验证设置
                     original_verify = self.scraper.verify
@@ -373,7 +373,7 @@ def request_get(url, cookies={}, timeout=None, delay_raise=False, verify_ssl=Non
     except requests.exceptions.SSLError as e:
         # 如果是SSL错误且当前启用了SSL验证，尝试禁用SSL验证重试
         if verify_ssl and ('eof occurred in violation of protocol' in str(e).lower() or 'ssl' in str(e).lower()):
-            logger.warning(f"SSL错误，尝试禁用SSL验证重试: {url}")
+            logger.debug(f"SSL错误，尝试禁用SSL验证重试: {url}")
             r = _global_session.get(url, headers=headers, proxies=read_proxy(),
                                     cookies=cookies, timeout=timeout, verify=False)
         else:
@@ -402,7 +402,7 @@ def request_post(url, data, cookies={}, timeout=None, delay_raise=False, verify_
     except requests.exceptions.SSLError as e:
         # 如果是SSL错误且当前启用了SSL验证，尝试禁用SSL验证重试
         if verify_ssl and ('eof occurred in violation of protocol' in str(e).lower() or 'ssl' in str(e).lower()):
-            logger.warning(f"SSL错误，尝试禁用SSL验证重试: {url}")
+            logger.debug(f"SSL错误，尝试禁用SSL验证重试: {url}")
             r = _global_session.post(url, data=data, headers=headers, proxies=read_proxy(
             ), cookies=cookies, timeout=timeout, verify=False)
         else:

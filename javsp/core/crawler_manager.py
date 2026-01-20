@@ -47,7 +47,7 @@ class CrawlerManager:
                     logger.error(e)
                     break
                 except requests.exceptions.SSLError as e:
-                    logger.warning(f'{crawler_name}: SSL证书验证失败: {repr(e)}')
+                    logger.debug(f'{crawler_name}: SSL证书验证失败: {repr(e)}')
                     # 检查是否是特定的SSL错误类型
                     error_msg = str(e).lower()
                     if cnt == 0 and ('eof occurred in violation of protocol' in error_msg or 'ssl' in error_msg):
