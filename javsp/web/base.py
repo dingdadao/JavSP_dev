@@ -130,6 +130,8 @@ class Request():
                 ctx = ssl.create_default_context()
                 ctx.check_hostname = False
                 ctx.verify_mode = ssl.CERT_NONE
+                # 针对特定SSL错误进行额外配置
+                ctx.set_ciphers('DEFAULT@SECLEVEL=1')
                 self.scraper.ssl_context = ctx
             except:
                 pass
@@ -260,14 +262,42 @@ def _create_global_session():
         backoff_factor=config.retry_backoff_factor,
         status_forcelist=config.retry_status_forcelist,
     )
-    adapter = HTTPAdapter(
-        pool_connections=config.pool_connections,  # 连接池数量
-        pool_maxsize=config.pool_maxsize,          # 最大连接数
-        pool_block=config.pool_block,              # 是否阻塞等待连接
-        max_retries=retry_strategy
-    )
-    session.mount("http://", adapter)
-    session.mount("https://", adapter)
+
+    import ssl
+    try:
+        # 创建自定义的HTTPS适配器，跳过SSL验证
+        class CustomHTTPSAdapter(HTTPAdapter):
+            def init_poolmanager(self, *args, **kwargs):
+                kwargs['assert_hostname'] = False
+                kwargs['cert_reqs'] = ssl.CERT_NONE
+                return super().init_poolmanager(*args, **kwargs)
+
+        adapter_http = HTTPAdapter(
+            pool_connections=config.pool_connections,  # 连接池数量
+            pool_maxsize=config.pool_maxsize,          # 最大连接数
+            pool_block=config.pool_block,              # 是否阻塞等待连接
+            max_retries=retry_strategy
+        )
+        adapter_https = CustomHTTPSAdapter(
+            pool_connections=config.pool_connections,  # 连接池数量
+            pool_maxsize=config.pool_maxsize,          # 最大连接数
+            pool_block=config.pool_block,              # 是否阻塞等待连接
+            max_retries=retry_strategy
+        )
+
+        session.mount("http://", adapter_http)
+        session.mount("https://", adapter_https)
+    except:
+        # 如果自定义适配器失败，使用默认适配器
+        adapter = HTTPAdapter(
+            pool_connections=config.pool_connections,  # 连接池数量
+            pool_maxsize=config.pool_maxsize,          # 最大连接数
+            pool_block=config.pool_block,              # 是否阻塞等待连接
+            max_retries=retry_strategy
+        )
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+
     return session
 
 
@@ -378,8 +408,9 @@ def dump_xpath_node(node, filename=None):
 def is_connectable(url, timeout=3):
     """测试与指定url的连接"""
     try:
+        # 强制跳过SSL验证
         r = _global_session.get(url, headers=headers,
-                                timeout=timeout, verify=ssl_verify)
+                                timeout=timeout, verify=False)
         return True
     except requests.exceptions.RequestException as e:
         logger.debug(f"Not connectable: {url}\n" + repr(e))
@@ -392,7 +423,7 @@ def urlretrieve(url, filename=None, reporthook=None, headers=None):
     """使用requests实现urlretrieve"""
     # https://blog.csdn.net/qq_38282706/article/details/80253447
     with contextlib.closing(_global_session.get(url, headers=headers,
-                                                proxies=read_proxy(), stream=True, verify=ssl_verify)) as r:
+                                                proxies=read_proxy(), stream=True, verify=False)) as r:
         header = r.headers
         with open(filename, 'wb+') as fp:
             bs = 1024
