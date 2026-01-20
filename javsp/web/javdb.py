@@ -157,7 +157,9 @@ def parse_data(movie: MovieInfo):
     if len(matches) == 0:
         raise MovieNotFoundError(__name__, movie.dvdid, ids)
     elif len(matches) > 1:
-        raise MovieDuplicateError(__name__, movie.dvdid, len(matches))
+        # 在自动模式下，如果有多个匹配结果，默认选择第一个
+        logger.debug(
+            f"'{movie.dvdid}': 存在{len(matches)}个完全匹配目标番号的搜索结果，自动选择第一个")
 
     try:
         index = ids.index(target_id)
