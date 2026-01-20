@@ -44,36 +44,38 @@ def parse_data(movie: MovieInfo):
         elif title and title[0].startswith('404'):
             raise MovieNotFoundError(__name__, movie.dvdid)
         else:
-            raise WebsiteError(f"JavBus: 页面结构异常，无法找到容器元素 {url}")
+            from javsp.web.exceptions import MovieNotFoundError
+            # 不抛出WebsiteError，而是抛出MovieNotFoundError，这样更容易处理
+            raise MovieNotFoundError(__name__, movie.dvdid, f"页面结构异常，无法找到容器元素")
     container = containers[0]
     title_elements = container.xpath("h3/text()")
     if not title_elements:
-        raise WebsiteError(f"JavBus: 无法获取标题 {url}")
+        raise MovieNotFoundError(__name__, movie.dvdid, f"无法获取标题")
     title = title_elements[0]
 
     cover_elements = container.xpath("//a[@class='bigImage']/img/@src")
     if not cover_elements:
-        raise WebsiteError(f"JavBus: 无法获取封面 {url}")
+        raise MovieNotFoundError(__name__, movie.dvdid, f"无法获取封面")
     cover = cover_elements[0]
 
     preview_pics = container.xpath("//div[@id='sample-waterfall']/a/@href")
     info_elements = container.xpath("//div[@class='col-md-3 info']")
     if not info_elements:
-        raise WebsiteError(f"JavBus: 无法找到信息框 {url}")
+        raise MovieNotFoundError(__name__, movie.dvdid, f"无法找到信息框")
     info = info_elements[0]
 
     dvdid_elements = info.xpath("p/span[text()='識別碼:']")
     if not dvdid_elements:
-        raise WebsiteError(f"JavBus: 无法找到DVD ID {url}")
+        raise MovieNotFoundError(__name__, movie.dvdid, f"无法找到DVD ID")
     dvdid = dvdid_elements[0].getnext().text
     publish_date_elements = info.xpath("p/span[text()='發行日期:']")
     if not publish_date_elements:
-        raise WebsiteError(f"JavBus: 无法找到发布日期 {url}")
+        raise MovieNotFoundError(__name__, movie.dvdid, f"无法找到发布日期")
     publish_date = publish_date_elements[0].tail.strip()
 
     duration_elements = info.xpath("p/span[text()='長度:']")
     if not duration_elements:
-        raise WebsiteError(f"JavBus: 无法找到时长 {url}")
+        raise MovieNotFoundError(__name__, movie.dvdid, f"无法找到时长")
     duration = duration_elements[0].tail.replace('分鐘', '').strip()
     director_tag = info.xpath("p/span[text()='導演:']")
     if director_tag:    # xpath没有匹配时将得到空列表

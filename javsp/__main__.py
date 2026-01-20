@@ -95,10 +95,10 @@ def parallel_crawler(movie: Movie, tqdm_bar=None):
                 logger.debug(e)
                 break
             except MovieDuplicateError as e:
-                logger.exception(e)
+                logger.error(f"{crawler_name}: {str(e)}")
                 break
             except (SiteBlocked, SitePermissionError, CredentialError) as e:
-                logger.error(e)
+                logger.error(f"{crawler_name}: {str(e)}")
                 break
             except requests.exceptions.RequestException as e:
                 logger.debug(
@@ -106,7 +106,8 @@ def parallel_crawler(movie: Movie, tqdm_bar=None):
                 if isinstance(tqdm_bar, tqdm):
                     tqdm_bar.set_description(f'{crawler_name}: 网络错误，正在重试')
             except Exception as e:
-                logger.exception(e)
+                # 避免错误信息破坏进度条显示，只记录日志不打印异常详情
+                logger.debug(f"{crawler_name}: 发生异常: {str(e)}")
 
     # 根据影片的数据源获取对应的抓取器
     crawler_mods: List[CrawlerID] = Cfg().crawler.selection[movie.data_src]

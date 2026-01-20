@@ -149,17 +149,25 @@ class Request():
                 if 'get' in str(func).lower():
                     kw_copy = kw.copy()
                     kw_copy.setdefault('verify', ssl_verify)
-                    # 对于SSL错误，尝试使用不同的SSL设置
+                    # 如果是SSL错误，尝试禁用SSL验证
                     if 'SSLError' in str(type(e)) or 'EOF occurred in violation of protocol' in str(e):
                         kw_copy['verify'] = False
-                    return requests.get(*args, **kw_copy)
+                    try:
+                        return requests.get(*args, **kw_copy)
+                    except Exception as fallback_error:
+                        logger.debug(f"退回常规请求也失败: {fallback_error}")
+                        raise  # 仍然抛出原始异常，但保持了错误处理链
                 else:
                     kw_copy = kw.copy()
                     kw_copy.setdefault('verify', ssl_verify)
-                    # 对于SSL错误，尝试使用不同的SSL设置
+                    # 如果是SSL错误，尝试禁用SSL验证
                     if 'SSLError' in str(type(e)) or 'EOF occurred in violation of protocol' in str(e):
                         kw_copy['verify'] = False
-                    return requests.post(*args, **kw_copy)
+                    try:
+                        return requests.post(*args, **kw_copy)
+                    except Exception as fallback_error:
+                        logger.debug(f"退回常规请求也失败: {fallback_error}")
+                        raise  # 仍然抛出原始异常，但保持了错误处理链
         return wrapper
 
     def _create_request_wrapper(self, original_func):
@@ -172,59 +180,139 @@ class Request():
 
     def get(self, url, delay_raise=False):
         # 对于scraper，verify参数已经在scraper实例中设置，不需要单独传递
-        if self.scraper is not None:
-            r = self.__get(url,
-                           headers=self.headers,
-                           proxies=self.proxies,
-                           cookies=self.cookies,
-                           timeout=self.timeout)
-        else:
-            r = self.__get(url,
-                           headers=self.headers,
-                           proxies=self.proxies,
-                           cookies=self.cookies,
-                           timeout=self.timeout,
-                           verify=ssl_verify)
+        try:
+            if self.scraper is not None:
+                r = self.__get(url,
+                               headers=self.headers,
+                               proxies=self.proxies,
+                               cookies=self.cookies,
+                               timeout=self.timeout)
+            else:
+                r = self.__get(url,
+                               headers=self.headers,
+                               proxies=self.proxies,
+                               cookies=self.cookies,
+                               timeout=self.timeout,
+                               verify=ssl_verify)
+        except requests.exceptions.SSLError as e:
+            # 如果是SSL错误，尝试禁用SSL验证重试
+            if ssl_verify and ('eof occurred in violation of protocol' in str(e).lower() or 'ssl' in str(e).lower()):
+                logger.warning(f"SSL错误，尝试禁用SSL验证重试: {url}")
+                if self.scraper is not None:
+                    # 临时修改scraper的SSL验证设置
+                    original_verify = self.scraper.verify
+                    self.scraper.verify = False
+                    try:
+                        r = self.__get(url,
+                                       headers=self.headers,
+                                       proxies=self.proxies,
+                                       cookies=self.cookies,
+                                       timeout=self.timeout)
+                    finally:
+                        self.scraper.verify = original_verify
+                else:
+                    r = self.__get(url,
+                                   headers=self.headers,
+                                   proxies=self.proxies,
+                                   cookies=self.cookies,
+                                   timeout=self.timeout,
+                                   verify=False)
+            else:
+                raise
         if not delay_raise:
             r.raise_for_status()
         return r
 
     def post(self, url, data, delay_raise=False):
         # 对于scraper，verify参数已经在scraper实例中设置，不需要单独传递
-        if self.scraper is not None:
-            r = self.__post(url,
-                            data=data,
-                            headers=self.headers,
-                            proxies=self.proxies,
-                            cookies=self.cookies,
-                            timeout=self.timeout)
-        else:
-            r = self.__post(url,
-                            data=data,
-                            headers=self.headers,
-                            proxies=self.proxies,
-                            cookies=self.cookies,
-                            timeout=self.timeout,
-                            verify=ssl_verify)
+        try:
+            if self.scraper is not None:
+                r = self.__post(url,
+                                data=data,
+                                headers=self.headers,
+                                proxies=self.proxies,
+                                cookies=self.cookies,
+                                timeout=self.timeout)
+            else:
+                r = self.__post(url,
+                                data=data,
+                                headers=self.headers,
+                                proxies=self.proxies,
+                                cookies=self.cookies,
+                                timeout=self.timeout,
+                                verify=ssl_verify)
+        except requests.exceptions.SSLError as e:
+            # 如果是SSL错误，尝试禁用SSL验证重试
+            if ssl_verify and ('eof occurred in violation of protocol' in str(e).lower() or 'ssl' in str(e).lower()):
+                logger.warning(f"SSL错误，尝试禁用SSL验证重试: {url}")
+                if self.scraper is not None:
+                    # 临时修改scraper的SSL验证设置
+                    original_verify = self.scraper.verify
+                    self.scraper.verify = False
+                    try:
+                        r = self.__post(url,
+                                        data=data,
+                                        headers=self.headers,
+                                        proxies=self.proxies,
+                                        cookies=self.cookies,
+                                        timeout=self.timeout)
+                    finally:
+                        self.scraper.verify = original_verify
+                else:
+                    r = self.__post(url,
+                                    data=data,
+                                    headers=self.headers,
+                                    proxies=self.proxies,
+                                    cookies=self.cookies,
+                                    timeout=self.timeout,
+                                    verify=False)
+            else:
+                raise
         if not delay_raise:
             r.raise_for_status()
         return r
 
     def head(self, url, delay_raise=True):
         # 对于scraper，verify参数已经在scraper实例中设置，不需要单独传递
-        if self.scraper is not None:
-            r = self.__head(url,
-                            headers=self.headers,
-                            proxies=self.proxies,
-                            cookies=self.cookies,
-                            timeout=self.timeout)
-        else:
-            r = self.__head(url,
-                            headers=self.headers,
-                            proxies=self.proxies,
-                            cookies=self.cookies,
-                            timeout=self.timeout,
-                            verify=ssl_verify)
+        try:
+            if self.scraper is not None:
+                r = self.__head(url,
+                                headers=self.headers,
+                                proxies=self.proxies,
+                                cookies=self.cookies,
+                                timeout=self.timeout)
+            else:
+                r = self.__head(url,
+                                headers=self.headers,
+                                proxies=self.proxies,
+                                cookies=self.cookies,
+                                timeout=self.timeout,
+                                verify=ssl_verify)
+        except requests.exceptions.SSLError as e:
+            # 如果是SSL错误，尝试禁用SSL验证重试
+            if ssl_verify and ('eof occurred in violation of protocol' in str(e).lower() or 'ssl' in str(e).lower()):
+                logger.warning(f"SSL错误，尝试禁用SSL验证重试: {url}")
+                if self.scraper is not None:
+                    # 临时修改scraper的SSL验证设置
+                    original_verify = self.scraper.verify
+                    self.scraper.verify = False
+                    try:
+                        r = self.__head(url,
+                                        headers=self.headers,
+                                        proxies=self.proxies,
+                                        cookies=self.cookies,
+                                        timeout=self.timeout)
+                    finally:
+                        self.scraper.verify = original_verify
+                else:
+                    r = self.__head(url,
+                                    headers=self.headers,
+                                    proxies=self.proxies,
+                                    cookies=self.cookies,
+                                    timeout=self.timeout,
+                                    verify=False)
+            else:
+                raise
         if not delay_raise:
             r.raise_for_status()
         return r
@@ -279,8 +367,18 @@ def request_get(url, cookies={}, timeout=None, delay_raise=False, verify_ssl=Non
     if verify_ssl is None:
         verify_ssl = ssl_verify
 
-    r = _global_session.get(url, headers=headers, proxies=read_proxy(),
-                            cookies=cookies, timeout=timeout, verify=verify_ssl)
+    try:
+        r = _global_session.get(url, headers=headers, proxies=read_proxy(),
+                                cookies=cookies, timeout=timeout, verify=verify_ssl)
+    except requests.exceptions.SSLError as e:
+        # 如果是SSL错误且当前启用了SSL验证，尝试禁用SSL验证重试
+        if verify_ssl and ('eof occurred in violation of protocol' in str(e).lower() or 'ssl' in str(e).lower()):
+            logger.warning(f"SSL错误，尝试禁用SSL验证重试: {url}")
+            r = _global_session.get(url, headers=headers, proxies=read_proxy(),
+                                    cookies=cookies, timeout=timeout, verify=False)
+        else:
+            raise
+
     if not delay_raise:
         if r.status_code == 403 and b'>Just a moment...<' in r.content:
             raise SiteBlocked(f"403 Forbidden: 无法通过CloudFlare检测: {url}")
@@ -298,8 +396,18 @@ def request_post(url, data, cookies={}, timeout=None, delay_raise=False, verify_
     if verify_ssl is None:
         verify_ssl = ssl_verify
 
-    r = _global_session.post(url, data=data, headers=headers, proxies=read_proxy(
-    ), cookies=cookies, timeout=timeout, verify=verify_ssl)
+    try:
+        r = _global_session.post(url, data=data, headers=headers, proxies=read_proxy(
+        ), cookies=cookies, timeout=timeout, verify=verify_ssl)
+    except requests.exceptions.SSLError as e:
+        # 如果是SSL错误且当前启用了SSL验证，尝试禁用SSL验证重试
+        if verify_ssl and ('eof occurred in violation of protocol' in str(e).lower() or 'ssl' in str(e).lower()):
+            logger.warning(f"SSL错误，尝试禁用SSL验证重试: {url}")
+            r = _global_session.post(url, data=data, headers=headers, proxies=read_proxy(
+            ), cookies=cookies, timeout=timeout, verify=False)
+        else:
+            raise
+
     if not delay_raise:
         r.raise_for_status()
     return r
