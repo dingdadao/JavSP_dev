@@ -566,32 +566,51 @@ def RunNormalMode(all_movies):
             # 下载剧照
             if Cfg().summarizer.extra_fanarts.enabled:
                 scrape_interval = Cfg().summarizer.extra_fanarts.scrap_interval.total_seconds()
+                concurrent_downloads = Cfg().summarizer.extra_fanarts.concurrent_downloads
                 inner_bar.set_description('下载剧照')
                 try:
                     if movie.info.preview_pics:
                         extrafanartdir = movie.save_dir + '/extrafanart'
                         os.makedirs(extrafanartdir, exist_ok=True)
-                        for id, pic_url in enumerate(movie.info.preview_pics):
-                            inner_bar.set_description(
-                                f"Downloading extrafanart {id} from url: {pic_url}")
-                            fanart_destination = f"{extrafanartdir}/{id}.png"
-                            try:
-                                info = download(pic_url, fanart_destination)
-                                if valid_pic(fanart_destination):
-                                    filesize = get_fmt_size(pic_path)
-                                    width, height = get_pic_size(pic_path)
-                                    elapsed = time.strftime(
-                                        "%M:%S", time.gmtime(info['elapsed']))
-                                    speed = get_fmt_size(info['rate']) + '/s'
-                                    logger.info(
-                                        f"已下载剧照{pic_url} {id}.png: {width}x{height}, {filesize} [{elapsed}, {speed}]")
-                                else:
+
+                        if concurrent_downloads > 0:
+                            # 使用并发下载
+                            download_extrafanart_concurrent(
+                                movie, extrafanartdir, inner_bar)
+                        else:
+                            # 使用原有的串行下载
+                            max_download_count = Cfg().summarizer.extra_fanarts.max_download_count
+                            preview_pics = movie.info.preview_pics
+                            if max_download_count > 0:
+                                preview_pics = preview_pics[:max_download_count]
+                                logger.info(f"限制下载前{max_download_count}张剧照")
+
+                            logger.info(f"开始串行下载 {len(preview_pics)} 张剧照")
+                            for id, pic_url in enumerate(preview_pics):
+                                inner_bar.set_description(
+                                    f"Downloading extrafanart {id} from url: {pic_url}")
+                                fanart_destination = f"{extrafanartdir}/{id}.png"
+                                try:
+                                    info = download(
+                                        pic_url, fanart_destination)
+                                    if valid_pic(fanart_destination):
+                                        filesize = get_fmt_size(
+                                            fanart_destination)
+                                        width, height = get_pic_size(
+                                            fanart_destination)
+                                        elapsed = time.strftime(
+                                            "%M:%S", time.gmtime(info['elapsed']))
+                                        speed = get_fmt_size(
+                                            info['rate']) + '/s'
+                                        logger.info(
+                                            f"已下载剧照{pic_url} {id}.png: {width}x{height}, {filesize} [{elapsed}, {speed}]")
+                                    else:
+                                        check_step(
+                                            False, f"下载剧照{id}: {pic_url}失败", should_continue=True)
+                                except Exception as e:
                                     check_step(
                                         False, f"下载剧照{id}: {pic_url}失败", should_continue=True)
-                            except Exception as e:
-                                check_step(
-                                    False, f"下载剧照{id}: {pic_url}失败", should_continue=True)
-                            time.sleep(scrape_interval)
+                                time.sleep(scrape_interval)
                 except Exception as e:
                     logger.error(f"下载剧照失败: {e}")
                     check_step(False, f"下载剧照失败: {e}", should_continue=True)
@@ -723,6 +742,75 @@ def entry():
     RunNormalMode(recognized + recognize_fail)
 
     sys.exit(0)
+
+
+def download_extrafanart_concurrent(movie, extrafanartdir, progress_bar):
+    """并发下载extrafanart图片
+
+    逻辑：
+    1. 根据max_download_count限制下载数量
+    2. 使用concurrent_downloads控制并发数
+    3. 一次性提交所有任务，让线程池自动管理并发
+    """
+    import concurrent.futures
+    import threading
+
+    concurrent_downloads = Cfg().summarizer.extra_fanarts.concurrent_downloads
+    max_download_count = Cfg().summarizer.extra_fanarts.max_download_count
+
+    def download_single_image(args):
+        id, pic_url = args
+        fanart_destination = f"{extrafanartdir}/{id}.png"
+
+        try:
+            # 更新进度条描述
+            progress_bar.set_description(
+                f"Downloading extrafanart {id} from url: {pic_url}")
+
+            info = download(pic_url, fanart_destination)
+            if valid_pic(fanart_destination):
+                filesize = get_fmt_size(fanart_destination)
+                width, height = get_pic_size(fanart_destination)
+                elapsed = time.strftime("%M:%S", time.gmtime(info['elapsed']))
+                speed = get_fmt_size(info['rate']) + '/s'
+                logger.info(
+                    f"已下载剧照{pic_url} {id}.png: {width}x{height}, {filesize} [{elapsed}, {speed}]")
+                return (id, True, None)
+            else:
+                return (id, False, f"图片无效或已损坏: {pic_url}")
+        except Exception as e:
+            return (id, False, f"下载失败: {str(e)}")
+
+    # 准备下载任务，根据max_download_count限制数量
+    if max_download_count > 0:
+        download_tasks = [(id, pic_url)
+                          for id, pic_url in enumerate(movie.info.preview_pics[:max_download_count])]
+        logger.info(f"限制下载前{max_download_count}张剧照")
+    else:
+        download_tasks = [(id, pic_url)
+                          for id, pic_url in enumerate(movie.info.preview_pics)]
+
+    # 使用线程池并发下载
+    logger.info(f"开始并发下载，最大并发数: {concurrent_downloads}")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=concurrent_downloads) as executor:
+        # 一次性提交所有任务
+        future_to_id = {executor.submit(download_single_image, task): task[0]
+                        for task in download_tasks}
+
+        # 等待所有任务完成
+        completed_count = 0
+        for future in concurrent.futures.as_completed(future_to_id):
+            id = future_to_id[future]
+            try:
+                result_id, success, error_msg = future.result()
+                if success:
+                    completed_count += 1
+                else:
+                    logger.error(f"下载剧照{id}失败: {error_msg}")
+            except Exception as e:
+                logger.error(f"处理下载结果时出错: {e}")
+
+        logger.info(f"并发下载完成，成功下载 {completed_count}/{len(download_tasks)} 张剧照")
 
 
 if __name__ == "__main__":

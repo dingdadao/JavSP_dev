@@ -8,7 +8,8 @@ arg_parser = ArgumentParser(
     description='migration your javsp config to yaml')
 
 arg_parser.add_argument('-i', '--input', help='path to config.ini')
-arg_parser.add_argument('-o', '--output', help='path to output config', default="config.yml")
+arg_parser.add_argument(
+    '-o', '--output', help='path to output config', default="config.yml")
 
 args, _ = arg_parser.parse_known_args()
 
@@ -36,20 +37,25 @@ ignore_regex_lines = [f"    - '{r}'" for r in ignore_regexes]
 ignored_id_pattern_str = '\n'.join(ignore_regex_lines)
 
 input_directory = cfg['File']['scan_dir']
-input_directory = 'null' if len(input_directory) == 0 else f"'{input_directory}'"
+input_directory = 'null' if len(
+    input_directory) == 0 else f"'{input_directory}'"
 
-filename_extensions = [ext for ext in cfg['File']['media_ext'].split(';') if ext]
+filename_extensions = [ext for ext in cfg['File']
+                       ['media_ext'].split(';') if ext]
 filename_extensions_str = ", ".join([f".{ext}" for ext in filename_extensions])
 
 ignored_folders = [f for f in cfg['File']['ignore_folder'].split(';') if f]
-ignored_folder_patterns = ["'^\\.'"] + [f"'^{pat}$'" for pat in ignored_folders]
+ignored_folder_patterns = ["'^\\.'"] + \
+    [f"'^{pat}$'" for pat in ignored_folders]
 ignored_folder_pattern_str = '[' + ", ".join(ignored_folder_patterns) + ']'
 
 proxy_disabled = cfg['Network']['use_proxy'] == 'no' or cfg['Network']['proxy'] == ''
 skip_nfo_dir = cfg['File'].get('skip_nfo_dir', 'no')
 
-proxy_free_lines = [f"    {id}: '{url}'" for id, url in dict(cfg['ProxyFree']).items()]
+proxy_free_lines = [f"    {id}: '{url}'" for id,
+                    url in dict(cfg['ProxyFree']).items()]
 proxy_free_str = '\n'.join(proxy_free_lines)
+
 
 def yes_to_true(s):
     return 'true' if s == 'yes' else 'false'
@@ -78,7 +84,8 @@ def ai_crop_pat(s):
         return '^' + s
 
 
-ai_crop_labels = [r for r in cfg['Picture']['use_ai_crop_labels'].split(',') if r]
+ai_crop_labels = [r for r in cfg['Picture']
+                  ['use_ai_crop_labels'].split(',') if r]
 ai_crop_lines = [f"        - '{ai_crop_pat(r)}'" for r in ai_crop_labels]
 ai_crop_pattern_str = '\n'.join(ai_crop_lines)
 
@@ -226,8 +233,10 @@ summarizer:
   extra_fanarts:
     # 是否下载剧照？
     enabled: {yes_to_true(cfg['Picture'].get('use_extra_fanarts', 'no'))}
-    # 间隔的两次封面爬取请求之间应该间隔多久
-    scrap_interval: PT{cfg['Picture'].get('extra_fanarts_scrap_interval', 'no')}S
+    # 并发下载剧照的数量
+    concurrent_downloads: 3
+    # 最大下载剧照数量
+    max_download_count: 6
 
 ################################
 translator:

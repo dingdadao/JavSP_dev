@@ -166,7 +166,8 @@ class NFOSummarize(BaseConfig):
 
 class ExtraFanartSummarize(BaseConfig):
     enabled: bool
-    scrap_interval: Duration
+    concurrent_downloads: int = 3  # 并发下载数量
+    max_download_count: int = 6  # 最大下载剧照数量
 
 
 class SlimefaceEngine(BaseConfig):

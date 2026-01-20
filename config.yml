@@ -166,8 +166,10 @@ summarizer:
   extra_fanarts:
     # 是否下载剧照？
     enabled: true
-    # 间隔的两次封面爬取请求之间应该间隔多久
-    scrap_interval: PT1.5S
+    # 并发下载剧照的数量
+    concurrent_downloads: 3
+    # 最大下载剧照数量（0表示不限制，下载所有可用剧照）
+    max_download_count: 6
 
 ################################
 translator:
