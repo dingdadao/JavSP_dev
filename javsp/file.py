@@ -234,11 +234,17 @@ def load_skipped_files(root: str):
     else:
         skipped_files = set()
         logger.info("未找到跳过文件记录")
+    # 确保skipped_files始终是set类型
+    if not isinstance(skipped_files, set):
+        skipped_files = set()
 
 
 def add_skipped_file(filepath: str, root: str):
     """添加一个需要跳过的文件到记录"""
     global skipped_files
+    # 确保skipped_files是set类型
+    if not isinstance(skipped_files, set):
+        skipped_files = set(skipped_files) if skipped_files else set()
     # 检查文件是否已经记录过，避免重复写入
     if filepath not in skipped_files:
         skipped_files.add(filepath)

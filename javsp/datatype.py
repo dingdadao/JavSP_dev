@@ -194,8 +194,11 @@ class Movie:
                         logger.warning(
                             f"目标文件已存在且大小({dst_size})不小于源文件({src_size})，跳过移动: {abs_dst}")
                         # 在这里添加跳过记录
-                        from javsp.file import add_skipped_file
-                        add_skipped_file(src, os.path.dirname(src))
+                        try:
+                            from javsp.file import add_skipped_file
+                            add_skipped_file(src, os.path.dirname(src))
+                        except Exception as e:
+                            logger.error(f"添加跳过文件记录时出错: {e}")
                         return abs_dst
                     else:
                         logger.info(
@@ -257,8 +260,11 @@ class Movie:
                     logger.warning(
                         f"目标文件已存在且大小({dst_size})不小于源文件({src_size})，跳过移动: {abs_dst}")
                     # 在这里也添加跳过记录
-                    from javsp.file import add_skipped_file
-                    add_skipped_file(src, os.path.dirname(src))
+                    try:
+                        from javsp.file import add_skipped_file
+                        add_skipped_file(src, os.path.dirname(src))
+                    except Exception as e:
+                        logger.error(f"添加跳过文件记录时出错: {e}")
                 else:
                     logger.info(
                         f"目标文件已存在但大小({dst_size})小于源文件({src_size})，将继续移动: {abs_dst}")
