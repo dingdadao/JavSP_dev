@@ -36,6 +36,9 @@ def scan_movies(root: str) -> List[Movie]:
     # 加载需要跳过的文件记录
     load_skipped_files(root)
 
+    # 声明使用全局变量
+    global skipped_files
+
     # 扫描所有影片文件并获取它们的番号
     dic = {}    # avid: [abspath1, abspath2...]
     small_videos = {}
