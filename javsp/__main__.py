@@ -455,8 +455,12 @@ def process_poster(movie: Movie):
     fanart_cropped.save(movie.poster_file)
 
 
-def RunNormalMode(all_movies):
-    """普通整理模式"""
+def RunNormalMode(all_movies, root=None):
+    """普通整理模式
+    Args:
+        all_movies: 电影列表
+        root: 扫描根目录，用于记录跳过文件
+    """
 
     def check_step(result, msg='步骤错误', should_continue=True):
         """检查一个整理步骤的结果，并负责更新tqdm的进度"""
@@ -626,7 +630,8 @@ def RunNormalMode(all_movies):
             if Cfg().summarizer.move_files:
                 inner_bar.set_description('移动影片文件')
                 try:
-                    movie.rename_files(Cfg().summarizer.path.hard_link)
+                    movie.rename_files(
+                        Cfg().summarizer.path.hard_link, root=root)
                     check_step(True)
                     logger.info(f'整理完成，相关文件已保存到: {movie.save_dir}\n')
 
@@ -738,7 +743,7 @@ def entry():
     logger.info(f'扫描影片文件：共找到 {movie_count} 部影片')
     if Cfg().scanner.manual:
         reviewMovieID(recognized, root)
-    RunNormalMode(recognized + recognize_fail)
+    RunNormalMode(recognized + recognize_fail, root)
 
     sys.exit(0)
 

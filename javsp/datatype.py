@@ -173,8 +173,12 @@ class Movie:
             expression = f"('{self.dvdid}')"
         return __class__.__name__ + expression
 
-    def rename_files(self, use_hardlink: bool = False) -> None:
-        """根据命名规则移动（重命名）影片文件"""
+    def rename_files(self, use_hardlink: bool = False, root: str = None) -> None:
+        """根据命名规则移动（重命名）影片文件
+        Args:
+            use_hardlink: 是否使用硬链接代替复制
+            root: 扫描根目录，用于记录跳过文件
+        """
         def move_file(src: str, dst: str):
             """移动（重命名）文件并记录信息到日志"""
             abs_dst = os.path.abspath(dst)
@@ -196,7 +200,8 @@ class Movie:
                         # 在这里添加跳过记录
                         try:
                             from javsp.file import add_skipped_file
-                            add_skipped_file(src, os.path.dirname(src))
+                            # 使用扫描根目录作为记录位置，而不是源文件所在目录
+                            add_skipped_file(src, root)
                         except Exception as e:
                             logger.error(f"添加跳过文件记录时出错: {e}")
                         return abs_dst
@@ -262,7 +267,8 @@ class Movie:
                     # 在这里也添加跳过记录
                     try:
                         from javsp.file import add_skipped_file
-                        add_skipped_file(src, os.path.dirname(src))
+                        # 使用扫描根目录作为记录位置，而不是源文件所在目录
+                        add_skipped_file(src, root)
                     except Exception as e:
                         logger.error(f"添加跳过文件记录时出错: {e}")
                 else:
