@@ -9,6 +9,7 @@ __all__ = ['get_id', 'get_cid', 'guess_av_type']
 
 from javsp.config import Cfg
 
+
 def get_id(filepath_str: str) -> str:
     """从给定的文件路径中提取番号（DVD ID）"""
     filepath = Path(filepath_str)
@@ -17,7 +18,8 @@ def get_id(filepath_str: str) -> str:
     norm = ignore_pattern.sub('', filepath.stem).upper()
     if 'FC2' in norm:
         # 根据FC2 Club的影片数据，FC2编号为5-7个数字
-        match = re.search(r'FC2[^A-Z\d]{0,5}(PPV[^A-Z\d]{0,5})?(\d{5,7})', norm, re.I)
+        match = re.search(
+            r'FC2[^A-Z\d]{0,5}(PPV[^A-Z\d]{0,5})?(\d{5,7})', norm, re.I)
         if match:
             return 'FC2-' + match.group(2)
     elif 'HEYDOUGA' in norm:
@@ -32,14 +34,15 @@ def get_id(filepath_str: str) -> str:
         match = re.search(r'GYUTTO-(\d+)', norm, re.I)
         if match:
             return 'GYUTTO-' + match.group(1)
-    elif '259LUXU' in norm: # special case having form of '259luxu'
+    elif '259LUXU' in norm:  # special case having form of '259luxu'
         match = re.search(r'259LUXU-(\d+)', norm, re.I)
         if match:
             return '259LUXU-' + match.group(1)
 
     else:
         # 先尝试移除可疑域名进行匹配，如果匹配不到再使用原始文件名进行匹配
-        no_domain = re.sub(r'\w{3,10}\.(COM|NET|APP|XYZ)', '', norm, flags=re.I)
+        no_domain = re.sub(
+            r'\w{3,10}\.(COM|NET|APP|XYZ)', '', norm, flags=re.I)
         if no_domain != norm:
             avid = get_id(no_domain)
             if avid:
@@ -49,7 +52,8 @@ def get_id(filepath_str: str) -> str:
         if match:
             return 'heydouga-' + '-'.join(match.groups())
         # 匹配片商 MUGEN 的奇怪番号。由于MK3D2DBD的模式，要放在普通番号模式之前进行匹配
-        match = re.search(r'(MKB?D)[-_]*(S\d{2,3})|(MK3D2DBD|S2M|S2MBD)[-_]*(\d{2,3})', norm, re.I)
+        match = re.search(
+            r'(MKB?D)[-_]*(S\d{2,3})|(MK3D2DBD|S2M|S2MBD)[-_]*(\d{2,3})', norm, re.I)
         if match:
             if match.group(1) is not None:
                 avid = match.group(1) + '-' + match.group(2)
@@ -70,6 +74,14 @@ def get_id(filepath_str: str) -> str:
         match = re.search(r'(RED[01]\d\d|SKY[0-3]\d\d|EX00[01]\d)', norm, re.I)
         if match:
             return match.group(1)
+        # 先尝试匹配C-开头的番号（如C-2637）
+        match = re.search(r'C[-_](\d{3,5})', norm, re.I)
+        if match:
+            return 'C-' + match.group(1)
+        # 然后尝试匹配其他单字母+数字的格式（如M-2637，去除分隔符后变成M2637）
+        match = re.search(r'([A-Z])(\d{3,5})', norm, re.I)
+        if match:
+            return match.group(1) + '-' + match.group(2)
         # 然后再将影片视作缺失了-分隔符来匹配
         match = re.search(r'([A-Z]{2,})(\d{2,5})', norm, re.I)
         if match:
@@ -96,14 +108,16 @@ def get_id(filepath_str: str) -> str:
         if avid:
             return avid
     # 如果最后仍然匹配不了番号，则尝试使用文件所在文件夹的名字去匹配
-    
-    if filepath.parent.name != '': # haven't reach '.' or '/'
+
+    if filepath.parent.name != '':  # haven't reach '.' or '/'
         return get_id(filepath.parent.name)
     else:
         return ''
 
 
 CD_POSTFIX = re.compile(r'([-_]\w|cd\d)$')
+
+
 def get_cid(filepath: str) -> str:
     """尝试将给定的文件名匹配为CID（Content ID）"""
     basename = os.path.splitext(os.path.basename(filepath))[0]
@@ -135,10 +149,10 @@ def guess_av_type(avid: str) -> str:
     match = re.match(r'^FC2-\d{5,7}$', avid, re.I)
     if match:
         return 'fc2'
-    match = re.match(r'^GETCHU-(\d+)',avid,re.I)
+    match = re.match(r'^GETCHU-(\d+)', avid, re.I)
     if match:
         return 'getchu'
-    match = re.match(r'^GYUTTO-(\d+)',avid,re.I)
+    match = re.match(r'^GYUTTO-(\d+)', avid, re.I)
     if match:
         return 'gyutto'
     # 如果传入的avid完全匹配cid的模式，则将影片归类为cid
