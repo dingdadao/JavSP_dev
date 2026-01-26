@@ -629,6 +629,7 @@ def RunNormalMode(all_movies):
                     movie.rename_files(Cfg().summarizer.path.hard_link)
                     check_step(True)
                     logger.info(f'整理完成，相关文件已保存到: {movie.save_dir}\n')
+
                 except Exception as e:
                     logger.error(f"移动影片文件失败: {e}")
                     check_step(False, f"移动影片文件失败: {e}", should_continue=True)

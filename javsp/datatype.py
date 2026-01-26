@@ -186,7 +186,22 @@ class Movie:
                     logger.debug(f"源文件和目标文件相同，跳过: '{src}'")
                     return dst
                 else:
-                    raise FileExistsError(f'目标文件已存在: {abs_dst}')
+                    # 比较源文件和目标文件的大小
+                    src_size = os.path.getsize(src)
+                    dst_size = os.path.getsize(abs_dst)
+
+                    if dst_size >= src_size:
+                        logger.warning(
+                            f"目标文件已存在且大小({dst_size})不小于源文件({src_size})，跳过移动: {abs_dst}")
+                        # 在这里添加跳过记录
+                        from javsp.file import add_skipped_file
+                        add_skipped_file(src, os.path.dirname(src))
+                        return abs_dst
+                    else:
+                        logger.info(
+                            f"目标文件已存在但大小({dst_size})小于源文件({src_size})，将覆盖: {abs_dst}")
+                        # 删除目标文件，然后继续移动
+                        os.remove(abs_dst)
 
             # 检查目标目录是否存在，不存在则创建
             dst_dir = os.path.dirname(abs_dst)
@@ -229,14 +244,30 @@ class Movie:
                     self.save_dir, self.basename + f'-CD{i}' + ext)
                 target_paths.append((fullpath, newpath))
 
-        # 检查所有目标路径是否已存在
+        # 过滤掉目标文件已存在的情况
+        filtered_target_paths = []
         for src, dst in target_paths:
             abs_dst = os.path.abspath(dst)
             if os.path.exists(abs_dst) and not os.path.samefile(src, abs_dst):
-                raise FileExistsError(f'目标文件已存在: {abs_dst}')
+                # 比较源文件和目标文件的大小
+                src_size = os.path.getsize(src)
+                dst_size = os.path.getsize(abs_dst)
+
+                if dst_size >= src_size:
+                    logger.warning(
+                        f"目标文件已存在且大小({dst_size})不小于源文件({src_size})，跳过移动: {abs_dst}")
+                    # 在这里也添加跳过记录
+                    from javsp.file import add_skipped_file
+                    add_skipped_file(src, os.path.dirname(src))
+                else:
+                    logger.info(
+                        f"目标文件已存在但大小({dst_size})小于源文件({src_size})，将继续移动: {abs_dst}")
+                    filtered_target_paths.append((src, dst))
+            else:
+                filtered_target_paths.append((src, dst))
 
         # 执行移动操作
-        for src, dst in target_paths:
+        for src, dst in filtered_target_paths:
             moved_path = move_file(src, dst)
             if moved_path:  # 只有在文件确实被移动时才添加到列表
                 new_paths.append(moved_path)

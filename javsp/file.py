@@ -10,7 +10,8 @@ from sys import platform
 from typing import List
 
 
-__all__ = ['scan_movies', 'get_fmt_size', 'get_remaining_path_len', 'replace_illegal_chars', 'get_failed_when_scan', 'find_subtitle_in_dir']
+__all__ = ['scan_movies', 'get_fmt_size', 'get_remaining_path_len',
+           'replace_illegal_chars', 'get_failed_when_scan', 'find_subtitle_in_dir']
 
 
 from javsp.avid import *
@@ -21,17 +22,26 @@ from javsp.datatype import Movie
 logger = logging.getLogger(__name__)
 failed_items = []
 
+# 记录需要跳过的文件
+skipped_files_record = '.skipped'
+skipped_files = set()
+
 
 def scan_movies(root: str) -> List[Movie]:
     """获取文件夹内的所有影片的列表（自动探测同一文件夹内的分片）"""
-    # 由于实现的限制: 
+    # 由于实现的限制:
     # 1. 以数字编号最多支持10个分片，字母编号最多支持26个分片
     # 2. 允许分片间的编号有公共的前导符（如编号01, 02, 03），因为求prefix时前导符也会算进去
+
+    # 加载需要跳过的文件记录
+    load_skipped_files(root)
 
     # 扫描所有影片文件并获取它们的番号
     dic = {}    # avid: [abspath1, abspath2...]
     small_videos = {}
-    ignore_folder_name_pattern = re.compile('|'.join(Cfg().scanner.ignored_folder_name_pattern))
+    skipped_processed_files = []  # 记录被跳过的已处理文件
+    ignore_folder_name_pattern = re.compile(
+        '|'.join(Cfg().scanner.ignored_folder_name_pattern))
     for dirpath, dirnames, filenames in os.walk(root):
         for name in dirnames.copy():
             if ignore_folder_name_pattern.match(name):
@@ -46,6 +56,13 @@ def scan_movies(root: str) -> List[Movie]:
             ext = os.path.splitext(file)[1].lower()
             if ext in Cfg().scanner.filename_extensions:
                 fullpath = os.path.join(dirpath, file)
+
+                # 检查是否在跳过记录中
+                if fullpath in skipped_files:
+                    skipped_processed_files.append(fullpath)
+                    logger.debug(f"跳过已跳过的文件: {fullpath}")
+                    continue
+
                 # 忽略小于指定大小的文件
                 filesize = os.path.getsize(fullpath)
                 if filesize < Cfg().scanner.minimum_size:
@@ -76,12 +93,13 @@ def scan_movies(root: str) -> List[Movie]:
         elif avid:
             has_avid[name] = avid
     # 对于前面忽略的视频生成一个简单的提示
-    small_videos = {k:sorted(v) for k,v in sorted(small_videos.items())}
+    small_videos = {k: sorted(v) for k, v in sorted(small_videos.items())}
     skipped_files = list(itertools.chain(*small_videos.values()))
     skipped_cnt = len(skipped_files)
     if skipped_cnt > 0:
         if len(has_avid) > 0:
-            logger.info(f"跳过了 {', '.join(has_avid)} 等{skipped_cnt}个小于指定大小的视频文件")
+            logger.info(
+                f"跳过了 {', '.join(has_avid)} 等{skipped_cnt}个小于指定大小的视频文件")
         else:
             logger.info(f"跳过了{skipped_cnt}个小于指定大小的视频文件")
         logger.debug('跳过的视频文件如下:\n' + '\n'.join(skipped_files))
@@ -113,7 +131,7 @@ def scan_movies(root: str) -> List[Movie]:
         # 如果有不同的后缀，说明有文件名不符合正则表达式条件（没有发生替换或不带分片信息）
         if (len(set(postfixes)) != 1
             # remaining为初步提取的分片信息，不允许有重复值
-            or len(slices) != len(set(slices))):
+                or len(slices) != len(set(slices))):
             logger.debug(f"无法识别分片信息: {prefix=}, {remaining=}")
             non_slice_dup[avid] = files
             del dic[avid]
@@ -138,6 +156,12 @@ def scan_movies(root: str) -> List[Movie]:
             msg += ('  ' + os.path.relpath(f, root) + '\n')
     if msg:
         logger.error("下列番号对应多部影片文件且不符合分片规则，已略过整理，请手动处理后重新运行脚本: \n" + msg)
+    # 输出跳过的已处理文件信息
+    if skipped_processed_files:
+        logger.info(f"跳过了 {len(skipped_processed_files)} 个已处理的文件:")
+        for filepath in skipped_processed_files:
+            logger.info(f"  - {os.path.relpath(filepath, root)}")
+
     # 转换数据的组织格式
     movies: List[Movie] = []
     for avid, files in dic.items():
@@ -161,10 +185,12 @@ def get_failed_when_scan():
 
 
 _PARDIR_REPLACE = re.compile(r'\.{2,}')
+
+
 def replace_illegal_chars(name):
     """将不能用于文件名的字符替换为形近的字符"""
     # 非法字符列表 https://stackoverflow.com/a/31976060/6415337
-    if platform == 'win32': 
+    if platform == 'win32':
         # http://www.unicode.org/Public/security/latest/confusables.txt
         charmap = {'<': '❮',
                    '>': '❯',
@@ -187,9 +213,43 @@ def replace_illegal_chars(name):
     return name
 
 
+def load_skipped_files(root: str):
+    """加载需要跳过的文件记录"""
+    global skipped_files
+    record_path = os.path.join(root, skipped_files_record)
+    if os.path.exists(record_path):
+        try:
+            with open(record_path, 'r', encoding='utf-8') as f:
+                # 读取每行作为一个文件路径
+                lines = [line.strip()
+                         for line in f.readlines() if line.strip()]
+                skipped_files = set(lines)
+                logger.info(f"已加载 {len(skipped_files)} 个需要跳过的文件")
+        except Exception as e:
+            logger.warning(f"加载跳过文件记录失败: {e}")
+            skipped_files = set()
+    else:
+        skipped_files = set()
+        logger.info("未找到跳过文件记录")
+
+
+def add_skipped_file(filepath: str, root: str):
+    """添加一个需要跳过的文件到记录"""
+    global skipped_files
+    # 检查文件是否已经记录过，避免重复写入
+    if filepath not in skipped_files:
+        skipped_files.add(filepath)
+        record_path = os.path.join(root, skipped_files_record)
+        try:
+            with open(record_path, 'a', encoding='utf-8') as f:
+                f.write(filepath + '\n')
+        except Exception as e:
+            logger.error(f"添加跳过文件记录失败: {e}")
+
+
 def is_remote_drive(path: str):
     """判断一个路径是否为远程映射到本地"""
-    #TODO: 当前仅支持Windows平台
+    # TODO: 当前仅支持Windows平台
     if platform != 'win32':
         return False
     DRIVE_REMOTE = 0x4
@@ -200,10 +260,11 @@ def is_remote_drive(path: str):
 
 def get_remaining_path_len(path):
     """计算当前系统支持的最大路径长度与给定路径长度的差值"""
-    #TODO: 支持不同的操作系统
+    # TODO: 支持不同的操作系统
     fullpath = os.path.abspath(path)
     # Windows: If the length exceeds ~256 characters, you will be able to see the path/files via Windows/File Explorer, but may not be able to delete/move/rename these paths/files
-    length = len(fullpath.encode('utf-8')) if Cfg().summarizer.path.length_by_byte else len(fullpath)
+    length = len(fullpath.encode('utf-8')
+                 ) if Cfg().summarizer.path.length_by_byte else len(fullpath)
     remaining = Cfg().summarizer.path.length_maximum - length
     return remaining
 
@@ -221,7 +282,7 @@ def get_fmt_size(file_or_size) -> str:
         size = file_or_size
     else:
         size = os.path.getsize(file_or_size)
-    for unit in ['','Ki','Mi','Gi','Ti']:
+    for unit in ['', 'Ki', 'Mi', 'Gi', 'Ti']:
         # 1023.995: to avoid rounding bug when format str, e.g. 1048571 -> 1024.0 KiB
         if abs(size) < 1023.995:
             return f"{size:3.2f} {unit}B"
@@ -230,6 +291,8 @@ def get_fmt_size(file_or_size) -> str:
 
 _sub_files = {}
 SUB_EXTENSIONS = ('.srt', '.ass')
+
+
 def find_subtitle_in_dir(folder: str, dvdid: str):
     """在folder内寻找是否有匹配dvdid的字幕"""
     folder_data = _sub_files.get(folder)
@@ -242,7 +305,8 @@ def find_subtitle_in_dir(folder: str, dvdid: str):
                 if ext in SUB_EXTENSIONS:
                     match_id = get_id(basename)
                     if match_id:
-                        folder_data[match_id.upper()] = os.path.join(dirpath, file)
+                        folder_data[match_id.upper()] = os.path.join(
+                            dirpath, file)
         _sub_files[folder] = folder_data
     sub_file = folder_data.get(dvdid.upper())
     return sub_file
