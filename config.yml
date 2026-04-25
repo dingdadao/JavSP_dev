@@ -110,9 +110,12 @@ summarizer:
   # 路径相关的选项
   path:
     # 存放影片、封面等文件的文件夹路径
-    output_folder_pattern: "/Volumes/data/JapanMovie/{actress}/{title}"
+    output_folder_pattern: "/Volumes/data/JapanMovie/{actress}/{num}"
     # 影片、封面、nfo信息文件等的文件名将基于下面的规则来创建
-    basename_pattern: "[{num}]"
+    basename_pattern: "{title}"
+    # 影片文件的命名规则（单独设置，如不配置则使用 basename_pattern）
+    # 例如: 只想让影片文件使用番号命名，而封面/NFO使用标题命名
+    file_basename_pattern: "[{num}]"
     # 允许的最长文件路径（路径过长时将据此自动截短标题）
     length_maximum: 250
     # 是否以字节数来计算文件路径长度
@@ -223,11 +226,11 @@ translator:
   # engine:
   #   name: openai
   #   # OpenAI API（默认使用 Groq，可替换成任何兼容 OpenAI 的第三方 API）
-  #   url: 'https://api.groq.com/openai/v1/chat/completions'
+  #   url: 'http://10.0.0.5:1234/v1/chat/completions'
   #   api_key: ''
   #   # 要使用的模型（默认使用 Groq 的 llama-3.1-70b-versatile 模型，若使用 OpenAI 官方 API 的话一般模型为 gpt-3.5-turbo）
-  #   model: llama-3.1-70b-versatile
-  ## }}}
+  #   model: qwen/qwen2.5-vl-7b
+  # }}}
 
   # 是否翻译各个字段
   fields:

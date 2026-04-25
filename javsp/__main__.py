@@ -386,6 +386,10 @@ def generate_names(movie: Movie):
 
     copyd['num'] = copyd['num'] + movie.attr_str
     longest_ext = max((os.path.splitext(i)[1] for i in movie.files), key=len)
+    
+    # 获取影片文件名的命名规则，如果未配置则使用 basename_pattern
+    file_basename_pattern = Cfg().summarizer.path.file_basename_pattern or Cfg().summarizer.path.basename_pattern
+    
     for end in range(len(ori_title_break), 0, -1):
         copyd['rawtitle'] = replace_illegal_chars(
             ''.join(ori_title_break[:end]).strip())
@@ -395,6 +399,10 @@ def generate_names(movie: Movie):
             if Cfg().summarizer.move_files:
                 save_dir = os.path.normpath(
                     Cfg().summarizer.path.output_folder_pattern.format(**copyd)).strip()
+                # 影片文件使用 file_basename_pattern
+                file_basename = os.path.normpath(
+                    file_basename_pattern.format(**copyd)).strip()
+                # 封面、NFO 等使用 basename_pattern
                 basename = os.path.normpath(
                     Cfg().summarizer.path.basename_pattern.format(**copyd)).strip()
             else:
@@ -402,12 +410,13 @@ def generate_names(movie: Movie):
                 save_dir = os.path.dirname(movie.files[0])
                 filebasename = os.path.basename(movie.files[0])
                 ext = os.path.splitext(filebasename)[1]
-                basename = filebasename.replace(ext, '')
-            long_path = os.path.join(save_dir, basename+longest_ext)
+                file_basename = filebasename.replace(ext, '')
+                basename = file_basename
+            long_path = os.path.join(save_dir, file_basename+longest_ext)
             remaining = get_remaining_path_len(os.path.abspath(long_path))
             if remaining > 0:
                 movie.save_dir = save_dir
-                movie.basename = basename
+                movie.basename = file_basename
                 movie.nfo_file = os.path.join(
                     save_dir, Cfg().summarizer.nfo.basename_pattern.format(**copyd) + '.nfo')
                 movie.fanart_file = os.path.join(
@@ -424,14 +433,17 @@ def generate_names(movie: Movie):
             save_dir = os.path.dirname(movie.files[0])
             filebasename = os.path.basename(movie.files[0])
             ext = os.path.splitext(filebasename)[1]
-            basename = filebasename.replace(ext, '')
+            file_basename = filebasename.replace(ext, '')
+            basename = file_basename
         else:
             save_dir = os.path.normpath(
                 Cfg().summarizer.path.output_folder_pattern.format(**copyd)).strip()
+            file_basename = os.path.normpath(
+                file_basename_pattern.format(**copyd)).strip()
             basename = os.path.normpath(
                 Cfg().summarizer.path.basename_pattern.format(**copyd)).strip()
         movie.save_dir = save_dir
-        movie.basename = basename
+        movie.basename = file_basename
 
         movie.nfo_file = os.path.join(
             save_dir, Cfg().summarizer.nfo.basename_pattern.format(**copyd) + '.nfo')

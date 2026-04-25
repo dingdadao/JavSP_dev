@@ -2,7 +2,7 @@
 import requests
 from javsp.web.base import read_proxy
 from javsp.datatype import MovieInfo
-from javsp.config import BaiduTranslateEngine, BingTranslateEngine, Cfg, ClaudeTranslateEngine, GoogleTranslateEngine, GoogleAITranslateEngine, OpenAITranslateEngine, TranslateEngine
+from javsp.config import BaiduTranslateEngine, BingTranslateEngine, Cfg, ClaudeTranslateEngine, GoogleTranslateEngine, GoogleAITranslateEngine, LocalAITranslateEngine, OpenAITranslateEngine, TranslateEngine
 import json
 # 由于翻译服务不走代理，而且需要自己的错误处理机制，因此不通过base.py来管理网络请求
 import time
@@ -73,6 +73,7 @@ def translate(texts, engine: Union[
     BingTranslateEngine,
     ClaudeTranslateEngine,
     OpenAITranslateEngine,
+    LocalAITranslateEngine,
     GoogleAITranslateEngine,
     None
 ], actress=[]):
@@ -157,6 +158,18 @@ def translate(texts, engine: Union[
     elif engine.name == 'openai':
         try:
             result = openai_translate(
+                texts, engine.url, engine.api_key, engine.model,
+                max_retry=engine.max_retry, retry_delay=engine.retry_delay)
+            if 'error_code' not in result:
+                rtn = {'trans': result}
+            else:
+                err_msg = "{}: {}: {}".format(
+                    engine, result['error_code'], result['error_msg'])
+        except Exception as e:
+            err_msg = "{}: {}: Exception: {}".format(engine, -2, repr(e))
+    elif engine.name == 'localai':
+        try:
+            result = localai_translate(
                 texts, engine.url, engine.api_key, engine.model,
                 max_retry=engine.max_retry, retry_delay=engine.retry_delay)
             if 'error_code' not in result:
@@ -427,21 +440,34 @@ def claude_translate(texts, api_key, to="zh_CN", max_retry=3, retry_delay=1):
 def openai_translate(texts, url: str, api_key: str, model: str, to="zh_CN", max_retry=3, retry_delay=1):
     """
     兼容 OpenAI Chat API 和 Groq llama-3.1-70b-versatile 翻译接口的翻译函数，带重试机制
+    针对日本成人影片标题和简介优化
     """
     api_url = str(url)
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}",
     }
+    
+    # 根据文本长度动态调整 max_tokens 和 timeout
+    is_short_text = len(texts) < 100
+    max_tokens = 256 if is_short_text else 1024
+    timeout = 30 if is_short_text else 60
+    
     data = {
         "model": model,
         "messages": [
             {
                 "role": "system",
                 "content": (
-                    f"Translate the following Japanese paragraph into {to}, "
-                    "while leaving non-Japanese text, names, or text that does not look like Japanese untranslated. "
-                    "Reply with the translated text only, do not add any text that is not in the original content."
+                    f"你是一位专业的日本成人影片翻译专家。"
+                    f"请将以下日文标题或简介翻译成{to}。\n\n"
+                    "翻译规则：\n"
+                    "1. 保留番号不变（如 ABC-123, SSIS-999 等格式）\n"
+                    "2. 保留女优、男优的日文原名（人名不翻译）\n"
+                    "3. 保留制作商、系列名称等专有名词（如 S1, MOODYZ, kira☆kira 等）\n"
+                    "4. 准确翻译成人相关术语和描述内容\n"
+                    "5. 保持原标题的语序和风格，不要过度意译\n"
+                    "6. 只返回翻译结果，不要添加任何额外说明或解释"
                 )
             },
             {
@@ -450,12 +476,12 @@ def openai_translate(texts, url: str, api_key: str, model: str, to="zh_CN", max_
             }
         ],
         "temperature": 0,
-        "max_tokens": 1024,
+        "max_tokens": max_tokens,
     }
 
     for attempt in range(1, max_retry + 1):
         try:
-            r = requests.post(api_url, headers=headers, json=data, timeout=15)
+            r = requests.post(api_url, headers=headers, json=data, timeout=timeout)
             r.raise_for_status()
             resp = r.json()
 
@@ -488,6 +514,91 @@ def openai_translate(texts, url: str, api_key: str, model: str, to="zh_CN", max_
                 time.sleep(retry_delay)
             else:
                 logger.error(f"OpenAI翻译失败: {e}")
+                return {
+                    "error_code": -1,
+                    "error_msg": str(e),
+                }
+
+
+def localai_translate(texts, url: str, api_key: str, model: str, to="zh_CN", max_retry=3, retry_delay=1):
+    """
+    兼容本地 AI API (如 Ollama, LocalAI, vLLM 等) 的翻译函数，带重试机制
+    针对日本成人影片标题和简介优化
+    """
+    api_url = str(url).rstrip('/') + '/v1/chat/completions'
+    headers = {
+        "Content-Type": "application/json",
+    }
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    
+    # 根据文本长度动态调整 max_tokens 和 timeout
+    is_short_text = len(texts) < 100
+    max_tokens = 256 if is_short_text else 1024
+    timeout = 30 if is_short_text else 60
+    
+    data = {
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    f"你是一位专业的日本成人影片翻译专家。"
+                    f"请将以下日文标题或简介翻译成{to}。\n\n"
+                    "翻译规则：\n"
+                    "1. 保留番号不变（如 ABC-123, SSIS-999 等格式）\n"
+                    "2. 保留女优、男优的日文原名（人名不翻译）\n"
+                    "3. 保留制作商、系列名称等专有名词（如 S1, MOODYZ, kira☆kira 等）\n"
+                    "4. 准确翻译成人相关术语和描述内容\n"
+                    "5. 保持原标题的语序和风格，不要过度意译\n"
+                    "6. 只返回翻译结果，不要添加任何额外说明或解释"
+                )
+            },
+            {
+                "role": "user",
+                "content": texts
+            }
+        ],
+        "temperature": 0,
+        "max_tokens": max_tokens,
+    }
+
+    for attempt in range(1, max_retry + 1):
+        try:
+            r = requests.post(api_url, headers=headers, json=data, timeout=timeout)
+            r.raise_for_status()
+            resp = r.json()
+
+            # 标准 OpenAI 兼容格式
+            if "choices" in resp and len(resp["choices"]) > 0:
+                choice = resp["choices"][0]
+                if "message" in choice and "content" in choice["message"]:
+                    return choice["message"]["content"].strip()
+                elif "text" in choice:
+                    return choice["text"].strip()
+
+            # Ollama 格式
+            if "response" in resp:
+                return resp["response"].strip()
+
+            # 错误返回
+            if "error" in resp:
+                return {
+                    "error_code": r.status_code,
+                    "error_msg": resp["error"].get("message", "")
+                }
+
+            return {
+                "error_code": -1,
+                "error_msg": f"Unexpected response format: {resp}"
+            }
+
+        except requests.exceptions.RequestException as e:
+            logger.debug(f"本地AI翻译第 {attempt} 次失败: {e}")
+            if attempt < max_retry:
+                time.sleep(retry_delay)
+            else:
+                logger.error(f"本地AI翻译失败: {e}")
                 return {
                     "error_code": -1,
                     "error_msg": str(e),

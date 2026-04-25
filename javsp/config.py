@@ -151,6 +151,7 @@ class MovieDefault(BaseConfig):
 class PathSummarize(BaseConfig):
     output_folder_pattern: str
     basename_pattern: str
+    file_basename_pattern: str = ''  # 影片文件名的命名规则，为空时使用 basename_pattern
     length_maximum: PositiveInt
     length_by_byte: bool
     max_actress_count: PositiveInt = 10
@@ -246,6 +247,15 @@ class OpenAITranslateEngine(BaseConfig):
     retry_delay: int = 1
 
 
+class LocalAITranslateEngine(BaseConfig):
+    name: Literal['localai']
+    url: Url
+    api_key: str = ''
+    model: str
+    max_retry: int = 3
+    retry_delay: int = 1
+
+
 class GoogleTranslateEngine(BaseConfig):
     name: Literal['google']
     max_retry: int = 3
@@ -266,6 +276,7 @@ TranslateEngine: TypeAlias = Union[
     BingTranslateEngine,
     ClaudeTranslateEngine,
     OpenAITranslateEngine,
+    LocalAITranslateEngine,
     GoogleTranslateEngine,
     GoogleAITranslateEngine,
     None]
