@@ -21,7 +21,20 @@ logger = logging.getLogger(__name__)
 
 # 全局变量
 cookies_pool = []
-request = Request(use_scraper=True)
+
+# 从配置中读取 Cookie，如果配置了则使用
+javdb_cookies = Cfg().network.site_cookies.get('javdb', {})
+
+# 如果没有配置，使用默认 Cookie
+if not javdb_cookies:
+    javdb_cookies = {
+        "list_mode": "h",
+        "theme": "auto",
+        "locale": "zh",
+        "over18": "1",
+    }
+
+request = Request(use_scraper=True, cookies=javdb_cookies)
 request.headers['Accept-Language'] = 'zh-CN,zh;q=0.9,zh-TW;q=0.8,en-US;q=0.7,en;q=0.6,ja;q=0.5'
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -67,23 +80,8 @@ def get_html_wrapper(url):
     """
     global request
 
-    # 固定 Cookie 值（你 curl 的那段复制过来）
-    JAVDB_COOKIES = {
-        "list_mode": "h",
-        "theme": "auto",
-        "locale": "zh",
-        "over18": "1",
-        "cf_clearance": "PqwcU16z0mfu5TGFYHTlHYcCFS5aYgK5isXQVfBzATk-1751812866-1.2.1.1-BXv0Fbiug.S_Qgxv2tkk3VuKXZqTWDsR1gcg3zLr2o3cYGCkL1JGkPeMnHWKKvRHEvPT7tQNeGNMW3a732IbhsJgVAm7cD2Z4Sm.XjsogXlq_zTN4PbfElORbi24b9hXHaFEqK03ce3UCF1m2Kuhh06rZHiixAExXrxuQ0Da8MmKe80hE__fu58SFzUAqZ_ZocZtnuD9UZd4r9cpo7uErG2174hzHUWYkegokqjXZjE",
-        "_ym_uid": "1751812866757350996",
-        "_ym_d": "1751812866",
-        "_ym_isad": "2",
-        "_jdb_session": "/OD1/kRpJxsURHEtKBkClNdK5xs4GPrkaz/RuKCs3ny5OJO7l9lOcRAlfaHLv2MpNumBqfjQJUtucs4G8wmCmO2GV4BlxlpviEPUdYK+ORnchrf3qbT2iKo3ZLT5EBLtWjBHIFHvmJmYw2OnixhylYfbkn0duHzxGcjxkfNX12EwqHOB4RxIYhiV4kWy3ULi5EragdfYzrlVHfCsgTBOdLj05x3lpgalQtePfGWGNIgCtOZroCsUMnf22Pgu3QoLFE2BTCILszLfOikk6zm5ZOMdOKYzoWy/6j0N5rCG95JcDZi/qg3FBcwF--O94QVEMoOpRsLv2v--NT2KQBmTgWmpev/6PyelAA=="
-    }
-
     try:
-        request.cookies = JAVDB_COOKIES
         response = request.get(url)
-        # print(response.text)
     except Exception as e:
         logger.debug(f"请求失败: {url}，错误: {e}")
         # 不要直接抛出原始异常，而是转换为更标准的错误类型

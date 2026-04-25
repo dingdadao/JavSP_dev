@@ -15,7 +15,7 @@ def get_id(filepath_str: str) -> str:
     filepath = Path(filepath_str)
     # 通常是接收文件的路径，当然如果是普通字符串也可以
     ignore_pattern = re.compile('|'.join(Cfg().scanner.ignored_id_pattern))
-    norm = ignore_pattern.sub('', filepath.stem).upper()
+    norm = ignore_pattern.sub('', filepath.stem).upper().replace(' ', '')
     if 'FC2' in norm:
         # 根据FC2 Club的影片数据，FC2编号为5-7个数字
         match = re.search(

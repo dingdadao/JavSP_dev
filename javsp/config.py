@@ -19,6 +19,7 @@ class Scanner(BaseConfig):
     minimum_size: ByteSize
     skip_nfo_dir: bool
     manual: bool
+    clear_skipped_on_rescan: bool = False  # 重新扫描时是否清理 .skipped 文件
 
 
 class CrawlerID(str, Enum):
@@ -58,6 +59,9 @@ class Network(BaseConfig):
     retry_total: int = 3
     retry_backoff_factor: float = 1.0
     retry_status_forcelist: list[int] = [429, 500, 502, 503, 504]
+    # 站点 Cookie 配置（可选，用于需要登录的站点）
+    # 格式: JSON 字符串或键值对，例如: '{"javdb": {"cookie1": "value1", "cookie2": "value2"}}'
+    site_cookies: Dict[str, Dict[str, str]] = {}
 
 
 class CrawlerSelect(BaseConfig):
@@ -157,6 +161,14 @@ class TitleSummarize(BaseConfig):
     remove_trailing_actor_name: bool
 
 
+class DuplicateFilePolicy(BaseConfig):
+    """重复文件处理策略"""
+    # 处理策略: auto_select(自动选择大文件), manual(手动选择), skip(跳过)
+    strategy: str = 'auto_select'
+    # 自动选择时，文件大小差异阈值（字节），小于此值则跳过
+    size_threshold: int = 1024 * 1024  # 1MB
+
+
 class NFOSummarize(BaseConfig):
     basename_pattern: str
     title_pattern: str
@@ -200,22 +212,29 @@ class Summarizer(BaseConfig):
     cover: CoverSummarize
     fanart: FanartSummarize
     extra_fanarts: ExtraFanartSummarize
+    duplicate_file: DuplicateFilePolicy = DuplicateFilePolicy()
 
 
 class BaiduTranslateEngine(BaseConfig):
     name: Literal['baidu']
     app_id: str
     api_key: str
+    max_retry: int = 3
+    retry_delay: int = 1
 
 
 class BingTranslateEngine(BaseConfig):
     name: Literal['bing']
     api_key: str
+    max_retry: int = 3
+    retry_delay: int = 1
 
 
 class ClaudeTranslateEngine(BaseConfig):
     name: Literal['claude']
     api_key: str
+    max_retry: int = 3
+    retry_delay: int = 1
 
 
 class OpenAITranslateEngine(BaseConfig):
@@ -223,10 +242,23 @@ class OpenAITranslateEngine(BaseConfig):
     url: Url
     api_key: str
     model: str
+    max_retry: int = 3
+    retry_delay: int = 1
 
 
 class GoogleTranslateEngine(BaseConfig):
     name: Literal['google']
+    max_retry: int = 3
+    retry_delay: int = 1
+
+
+class GoogleAITranslateEngine(BaseConfig):
+    name: Literal['googleai']
+    url: Url
+    api_key: str
+    model: str
+    max_retry: int = 3
+    retry_delay: int = 1
 
 
 TranslateEngine: TypeAlias = Union[
@@ -235,6 +267,7 @@ TranslateEngine: TypeAlias = Union[
     ClaudeTranslateEngine,
     OpenAITranslateEngine,
     GoogleTranslateEngine,
+    GoogleAITranslateEngine,
     None]
 
 

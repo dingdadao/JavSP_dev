@@ -133,8 +133,23 @@ class CrawlerManager:
                 all_info = {k: v for k, v in all_info.items(
                 ) if k not in self.config.crawler.selection['cid']}
 
+        # 打印所有爬虫的返回结果（调试用）
+        logger.debug(f"=== 爬虫返回数据调试信息 ===")
+        logger.debug(f"影片番号: {movie.dvdid or movie.cid}")
+        logger.debug(f"爬虫总数: {len(all_info)}")
+        for name, info in all_info.items():
+            logger.debug(f"爬虫 [{name}]:")
+            logger.debug(f"  - URL: {getattr(info, 'url', 'None')}")
+            logger.debug(f"  - Title: {getattr(info, 'title', 'None')}")
+            logger.debug(f"  - Cover: {getattr(info, 'cover', 'None')}")
+            logger.debug(f"  - Genre: {getattr(info, 'genre', 'None')}")
+            logger.debug(f"  - Actress: {getattr(info, 'actress', 'None')}")
+
         # 删除抓取失败的站点对应的数据
         all_info = {k: v for k, v in all_info.items() if hasattr(v, 'success')}
+        logger.debug(f"成功抓取的爬虫数: {len(all_info)}")
+        for name, info in all_info.items():
+            logger.debug(f"成功爬虫 [{name}]: {info.title}")
         for info in all_info.values():
             del info.success
 

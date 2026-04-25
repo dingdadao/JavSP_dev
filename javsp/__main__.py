@@ -2,8 +2,9 @@ from javsp.prompt import prompt
 from javsp.config import Cfg, CrawlerID, UseJavDBCover
 from javsp.web.translate import translate_movie_info
 from javsp.web.exceptions import *
-from javsp.web.base import download
+from javsp.web.base import download, close_global_session
 from javsp.datatype import Movie, MovieInfo
+from javsp.web.base import Request
 from javsp.image import *
 from javsp.func import *
 from javsp.file import *
@@ -20,6 +21,7 @@ import re
 import sys
 import json
 import time
+import signal
 import logging
 from PIL import Image
 from pydantic import ValidationError
@@ -30,8 +32,58 @@ from typing import Dict, List
 
 sys.stdout.reconfigure(encoding='utf-8')
 
-
 pretty_errors.configure(display_link=True)
+
+# 配置日志级别，支持 DEBUG 模式
+_debug_mode = '--debug' in sys.argv
+if _debug_mode:
+    sys.argv.remove('--debug')
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+else:
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(message)s'
+    )
+
+# 全局变量，用于跟踪程序状态
+_shutdown_requested = False
+_current_movie_index = 0
+_total_movies = 0
+_processed_count = 0
+
+
+def graceful_shutdown(signum=None, frame=None):
+    """优雅退出程序"""
+    global _shutdown_requested
+    if _shutdown_requested:
+        logger.warning("已收到退出信号，正在等待当前操作完成...")
+        return
+    
+    _shutdown_requested = True
+    logger.info("\n收到退出信号，正在安全退出...")
+    
+    # 关闭全局会话，清理连接池
+    try:
+        close_global_session()
+        logger.debug("网络连接已关闭")
+    except Exception as e:
+        logger.debug(f"关闭网络连接时出错: {e}")
+    
+    # 输出统计信息
+    if _total_movies > 0:
+        logger.info(f"已处理 {_processed_count}/{_total_movies} 部影片")
+    
+    logger.info("程序已安全退出")
+    sys.exit(0)
+
+
+# 注册信号处理器
+signal.signal(signal.SIGINT, graceful_shutdown)   # Ctrl+C
+signal.signal(signal.SIGTERM, graceful_shutdown)  # kill 命令
 
 
 # 将StreamHandler的stream修改为TqdmOut，以与Tqdm协同工作
@@ -478,8 +530,22 @@ def RunNormalMode(all_movies, root=None):
     if Cfg().summarizer.extra_fanarts.enabled:
         total_step += 1
 
+    # 设置全局变量，用于优雅退出
+    global _total_movies, _processed_count
+    _total_movies = len(all_movies)
+    _processed_count = 0
+
     return_movies = []
-    for movie in outer_bar:
+    for movie_index, movie in enumerate(outer_bar):
+        # 检查是否需要退出
+        if _shutdown_requested:
+            logger.info("检测到退出信号，停止处理新任务")
+            break
+        
+        # 更新当前处理进度
+        _current_movie_index = movie_index
+        _processed_count = movie_index
+        
         try:
             filenames = [os.path.split(i)[1] for i in movie.files]
             logger.info('正在整理: ' + ', '.join(filenames))
@@ -550,7 +616,10 @@ def RunNormalMode(all_movies, root=None):
             try:
                 cover_dl = download_cover(movie.info.covers, movie.fanart_file,
                                           movie.info.big_covers if Cfg().summarizer.cover.highres else None)
-                check_step(cover_dl, '下载封面图片失败')
+                if cover_dl is None:
+                    logger.error(f"封面下载失败: {movie.dvdid or movie.cid}")
+                    check_step(False, '下载封面图片失败', should_continue=True)
+                    continue
                 cover, pic_path = cover_dl
                 if cover != movie.info.cover:
                     movie.info.cover = cover
@@ -560,8 +629,8 @@ def RunNormalMode(all_movies, root=None):
                     movie.poster_file = os.path.splitext(
                         movie.poster_file)[0] + actual_ext
             except Exception as e:
-                logger.error(f"封面下载失败: {e}")
-                check_step(False, f"封面下载失败: {e}", should_continue=True)
+                logger.error(f"封面下载异常: {e}")
+                check_step(False, f"封面下载异常: {e}", should_continue=True)
                 continue
 
             process_poster(movie)
@@ -735,15 +804,25 @@ def entry():
     import_crawlers()
     os.chdir(root)
 
-    print(f'扫描影片文件...')
-    recognized = scan_movies(root)
-    movie_count = len(recognized)
-    recognize_fail = []
-    error_exit(movie_count, '未找到影片文件')
-    logger.info(f'扫描影片文件：共找到 {movie_count} 部影片')
-    if Cfg().scanner.manual:
-        reviewMovieID(recognized, root)
-    RunNormalMode(recognized + recognize_fail, root)
+    try:
+        print(f'扫描影片文件...')
+        recognized = scan_movies(root)
+        movie_count = len(recognized)
+        recognize_fail = []
+        error_exit(movie_count, '未找到影片文件')
+        logger.info(f'扫描影片文件：共找到 {movie_count} 部影片')
+        if Cfg().scanner.manual:
+            reviewMovieID(recognized, root)
+        RunNormalMode(recognized + recognize_fail, root)
+    except KeyboardInterrupt:
+        # 如果信号处理器没有捕获到，这里也处理一下
+        graceful_shutdown()
+    finally:
+        # 确保无论如何都会清理资源
+        try:
+            close_global_session()
+        except:
+            pass
 
     sys.exit(0)
 

@@ -112,44 +112,193 @@ def scan_movies(root: str) -> List[Movie]:
         # 一一对应的直接略过
         if len(files) == 1:
             continue
-        dirs = set([os.path.split(i)[0] for i in files])
-        # 不同位置的多部影片有相同番号时，略过并报错
-        if len(dirs) > 1:
-            non_slice_dup[avid] = files
-            del dic[avid]
-            continue
-        # 提取分片信息（如果正则替换成功，只会剩下单个小写字符）。相关变量都要使用同样的列表生成顺序
+        
+        # 提取分片信息（允许不同目录的文件）
         basenames = [os.path.basename(i) for i in files]
-        prefix = os.path.commonprefix(basenames)
+        
+        # 尝试从文件名中提取番号部分，构建更准确的前缀
+        # 策略：找到所有文件名中都包含的、以番号开头的最长公共子串
+        # 先尝试用 avid 作为锚点
+        avid_clean = avid.replace('-', '').replace('_', '')
+        
+        # 找到每个文件名中 avid 出现的位置，然后提取公共前缀
+        def extract_prefix_from_avid(basename, avid_id):
+            """从文件名中提取以番号为起点的部分"""
+            basename_upper = basename.upper()
+            avid_upper = avid_id.upper()
+            # 尝试匹配番号（忽略大小写和分隔符）
+            for i in range(len(basename_upper)):
+                if basename_upper[i:].replace('-', '').replace('_', '').startswith(avid_upper.replace('-', '').replace('_', '')):
+                    return basename[i:]
+            return basename
+        
+        # 提取以番号为起点的文件名部分
+        avid_parts = [extract_prefix_from_avid(b, avid) for b in basenames]
+        prefix = os.path.commonprefix(avid_parts)
+        
+        # 如果前缀太短（小于3个字符），尝试其他策略
+        if len(prefix) < 3:
+            # 使用原始方法
+            prefix = os.path.commonprefix(basenames)
+        
+        # 尝试提取分片信息，支持两种模式：
+        # 1. 所有文件都有分片标记（如 A/B/C/D）
+        # 2. 部分文件没有分片标记（作为主文件/第1部分）
         try:
-            pattern_expr = re_escape(prefix) + r'\s*([a-z\d])\s*'
+            # 使用 .*? 允许前缀出现在文件名的任意位置
+            # 使用 [-_\s]* 允许分片标记前有分隔符（如 -, _, 空格）
+            # 注意：[-_\s]* 在末尾是贪婪的，会尽可能消耗分隔符
+            pattern_expr = r'.*?' + re_escape(prefix) + r'[-_\s]*([a-z\d])'
             pattern = re.compile(pattern_expr, flags=re.I)
         except re.error:
             logger.debug(f"正则识别影片分片信息时出错: '{pattern_expr}'")
-            del dic[avid]
-            continue
-        remaining = [pattern.sub(r'\1', i).lower() for i in basenames]
-        postfixes = [i[1:] for i in remaining]
-        slices = [i[0] for i in remaining]
-        # 如果有不同的后缀，说明有文件名不符合正则表达式条件（没有发生替换或不带分片信息）
-        if (len(set(postfixes)) != 1
-            # remaining为初步提取的分片信息，不允许有重复值
-                or len(slices) != len(set(slices))):
-            logger.debug(f"无法识别分片信息: {prefix=}, {remaining=}")
             non_slice_dup[avid] = files
             del dic[avid]
             continue
-        # 影片编号必须从 0/1/a 开始且编号连续
-        sorted_slices = sorted(slices)
+        
+        # 对于没有分片标记的文件，正则不会匹配，需要特殊处理
+        slices = []
+        extensions = []
+        for bn in basenames:
+            match = pattern.match(bn)
+            if match:
+                slice_char = match.group(1).lower()
+                slices.append(slice_char)
+                # 提取扩展名
+                _, ext = os.path.splitext(bn)
+                extensions.append(ext.lower())
+            else:
+                # 没有分片标记，尝试直接提取扩展名
+                _, ext = os.path.splitext(bn)
+                slices.append('')
+                extensions.append(ext.lower())
+        
+        # 检查扩展名是否一致（允许不同扩展名，但需要记录）
+        unique_extensions = set(extensions)
+        if len(unique_extensions) > 1:
+            logger.debug(f"分片文件扩展名不一致: {unique_extensions}")
+            # 不直接报错，继续处理
+        
+        # 处理分片信息
+        # 空字符串表示没有分片标记，应作为第1部分
+        normalized_slices = []
+        unmarked_count = slices.count('')
+        
+        if unmarked_count > 1:
+            # 有多个未标记的文件，这是错误的
+            logger.debug(f"有多个未标记分片的文件: {slices=}")
+            non_slice_dup[avid] = files
+            del dic[avid]
+            continue
+        
+        for s in slices:
+            if s == '':
+                normalized_slices.append('a')  # 无标记的作为第1部分
+            elif s.isdigit():
+                # 数字编号：1->a, 2->b, 3->c...
+                # 如果有未标记的文件，数字1应该映射到 'b'
+                if unmarked_count == 1:
+                    normalized_slices.append(chr(ord('a') + int(s)))
+                else:
+                    normalized_slices.append(chr(ord('a') + int(s) - 1))
+            else:
+                # 字母编号：a->a, b->b, c->c...
+                # 如果有未标记的文件，字母a应该映射到 'b'
+                if unmarked_count == 1:
+                    normalized_slices.append(chr(ord(s) + 1))
+                else:
+                    normalized_slices.append(s)
+        
+        # 检查编号是否连续且从a开始
+        sorted_slices = sorted(normalized_slices)
         first, last = sorted_slices[0], sorted_slices[-1]
-        if (first not in ('0', '1', 'a')) or (ord(last) != (ord(first)+len(sorted_slices)-1)):
+        if first != 'a' or (ord(last) != ord('a') + len(sorted_slices) - 1):
             logger.debug(f"无效的分片起始编号或分片编号不连续: {sorted_slices=}")
             non_slice_dup[avid] = files
             del dic[avid]
             continue
+        
         # 生成最终的分片信息
-        mapped_files = [files[slices.index(i)] for i in sorted_slices]
+        mapped_files = [files[normalized_slices.index(i)] for i in sorted_slices]
         dic[avid] = mapped_files
+        logger.debug(f"识别到分片影片 {avid}: {len(mapped_files)} 个分片")
+        for i, f in enumerate(mapped_files):
+            logger.debug(f"  分片 {chr(ord('A') + i)}: {os.path.basename(f)}")
+
+    # 处理重复文件（相同分片标记的文件）
+    if non_slice_dup:
+        duplicate_policy = Cfg().summarizer.duplicate_file
+        strategy = duplicate_policy.strategy
+        size_threshold = duplicate_policy.size_threshold
+        
+        resolved = {}
+        still_unresolved = {}
+        
+        for avid, files in non_slice_dup.items():
+            # 获取文件大小
+            file_sizes = [(f, os.path.getsize(f)) for f in files]
+            
+            # 优先选择带 -C 的文件（带字幕）
+            def has_subtitle_marker(filepath):
+                """检查文件名是否带 -C 标记（带字幕）"""
+                basename = os.path.basename(filepath).upper()
+                # 匹配 -C. 或 -C/ 或 -C结尾
+                return bool(re.search(r'-C[./\\]?$|-C$', basename))
+            
+            # 先按是否带字幕排序，再按大小排序
+            file_sizes.sort(key=lambda x: (
+                0 if has_subtitle_marker(x[0]) else 1,  # 带字幕的优先
+                -x[1]  # 大小降序
+            ))
+            
+            best_file = file_sizes[0]
+            second_best = file_sizes[1] if len(file_sizes) > 1 else None
+            
+            # 检查大小差异
+            if second_best and (best_file[1] - second_best[1]) > size_threshold:
+                # 大小差异明显，自动选择
+                if strategy == 'auto_select':
+                    resolved[avid] = [best_file[0]]
+                    subtitle_mark = "（带字幕）" if has_subtitle_marker(best_file[0]) else ""
+                    logger.info(f"自动选择文件 {avid}: {os.path.basename(best_file[0])} ({get_fmt_size(best_file[1])}){subtitle_mark}")
+                    continue
+            
+            # 需要手动选择或跳过
+            if strategy == 'skip':
+                still_unresolved[avid] = files
+            elif strategy == 'manual':
+                # 显示选项
+                print(f"\n发现重复文件 {avid}:")
+                for idx, (f, size) in enumerate(file_sizes, 1):
+                    subtitle_mark = " [带字幕]" if has_subtitle_marker(f) else ""
+                    print(f"  {idx}. {os.path.relpath(f, root)} ({get_fmt_size(size)}){subtitle_mark}")
+                
+                # 提示用户选择
+                if Cfg().other.interactive:
+                    choice = input("请选择要使用的文件编号（输入数字，多个文件用逗号分隔）[1]: ").strip() or "1"
+                else:
+                    logger.info(f"非交互模式，自动选择: {os.path.basename(best_file[0])}")
+                    choice = "1"
+                
+                try:
+                    choices = [int(c.strip()) for c in choice.split(',')]
+                    selected = [file_sizes[c - 1][0] for c in choices if 1 <= c <= len(file_sizes)]
+                    if selected:
+                        resolved[avid] = selected
+                    else:
+                        still_unresolved[avid] = files
+                except (ValueError, IndexError):
+                    still_unresolved[avid] = files
+            else:
+                # auto_select 但大小差异不明显，跳过
+                still_unresolved[avid] = files
+                # 记录到跳过文件
+                for f in files:
+                    add_skipped_file(f, root)
+        
+        # 更新 dic 和 non_slice_dup
+        dic.update(resolved)
+        non_slice_dup = still_unresolved
 
     # 汇总输出错误提示信息
     msg = ''
@@ -220,6 +369,17 @@ def load_skipped_files(root: str):
     """加载需要跳过的文件记录"""
     global skipped_files
     record_path = os.path.join(root, skipped_files_record)
+    
+    # 如果配置了清理跳过记录，则删除 .skipped 文件
+    if Cfg().scanner.clear_skipped_on_rescan and os.path.exists(record_path):
+        try:
+            os.remove(record_path)
+            logger.info("已清理跳过文件记录")
+            skipped_files = set()
+            return
+        except Exception as e:
+            logger.warning(f"清理跳过文件记录失败: {e}")
+    
     if os.path.exists(record_path):
         try:
             with open(record_path, 'r', encoding='utf-8') as f:

@@ -1,20 +1,18 @@
 """网络请求的统一接口"""
 from javsp.web.exceptions import *
 from javsp.config import Cfg
-import webbrowser
 import os
 import sys
 import time
-import shutil
 import logging
-import requests
+import webbrowser
 import contextlib
-import cloudscraper
+import requests
 import lxml.html
+from curl_cffi import requests as curl_requests
 from tqdm import tqdm
 from lxml import etree
 from lxml.html.clean import Cleaner
-from requests.models import Response
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import urllib3
@@ -38,6 +36,27 @@ logger = logging.getLogger(__name__)
 # 删除js脚本相关的tag，避免网页检测到没有js运行环境时强行跳转，影响调试
 cleaner = Cleaner(kill_tags=['script', 'noscript'])
 
+# 全局 curl_cffi Session，用于复用连接
+_global_curl_session = None
+
+
+def _get_curl_session():
+    """获取全局 curl_cffi Session"""
+    global _global_curl_session
+    if _global_curl_session is None:
+        _global_curl_session = curl_requests.Session(
+            impersonate="chrome120"
+        )
+    return _global_curl_session
+
+
+def _close_curl_session():
+    """关闭全局 curl_cffi Session"""
+    global _global_curl_session
+    if _global_curl_session:
+        _global_curl_session.close()
+        _global_curl_session = None
+
 
 def read_proxy():
     if Cfg().network.proxy_server is None:
@@ -58,6 +77,7 @@ def close_global_session():
     """关闭全局会话，清理连接池"""
     if hasattr(_global_session, 'close'):
         _global_session.close()
+    _close_curl_session()
     logger.debug("全局会话已关闭，连接池已清理")
 
 
@@ -67,6 +87,7 @@ def reset_global_session():
     if hasattr(_global_session, 'close'):
         _global_session.close()
     _global_session = _create_global_session()
+    _close_curl_session()
     logger.debug("全局会话已重置，连接池已重建")
 
 # 与网络请求相关的功能汇总到一个模块中以方便处理，但是不同站点的抓取器又有自己的需求（针对不同网站
@@ -77,10 +98,10 @@ def reset_global_session():
 class Request():
     """作为网络请求出口并支持各个模块定制功能"""
 
-    def __init__(self, use_scraper=False) -> None:
+    def __init__(self, use_scraper=False, cookies=None) -> None:
         # 必须使用copy()，否则各个模块对headers的修改都将会指向本模块中定义的headers变量，导致只有最后一个对headers的修改生效
         self.headers = headers.copy()
-        self.cookies = {}
+        self.cookies = cookies.copy() if cookies else {}
 
         self.proxies = read_proxy()
         self.timeout = Cfg().network.timeout.total_seconds()
@@ -113,25 +134,18 @@ class Request():
             self.__post = self._create_request_wrapper(self.session.post)
             self.__head = self._create_request_wrapper(self.session.head)
         else:
-            # 为cloudscraper也添加SSL验证配置和连接池
-            self.scraper = cloudscraper.create_scraper(
-                browser={'browser': 'chrome',
-                         'platform': 'windows', 'mobile': False},
-                sess=self.session  # 使用自定义会话
-            )
-            # 设置SSL验证，针对特定SSL错误进行处理
+            # 使用全局 curl_cffi Session 以复用连接
+            self.scraper = _get_curl_session()
+            # 设置代理
+            if self.proxies:
+                proxy_url = self.proxies.get('http') or self.proxies.get('https')
+                if proxy_url:
+                    self.scraper.proxies = {'http': proxy_url, 'https': proxy_url}
+            # 设置 SSL 验证
             self.scraper.verify = ssl_verify
-            # 设置更宽松的SSL上下文以处理特定SSL错误
-            if not ssl_verify:
-                import ssl
-                try:
-                    # 尝试设置更宽松的SSL上下文
-                    ctx = ssl.create_default_context()
-                    ctx.check_hostname = False
-                    ctx.verify_mode = ssl.CERT_NONE
-                    self.scraper.ssl_context = ctx
-                except:
-                    pass
+            # 同步 Cookie 到 curl_cffi Session
+            if self.cookies:
+                self.scraper.cookies.update(self.cookies)
             self.__get = self._scraper_monitor(
                 self._create_request_wrapper(self.scraper.get))
             self.__post = self._scraper_monitor(
@@ -140,38 +154,34 @@ class Request():
                 self._create_request_wrapper(self.scraper.head))
 
     def _scraper_monitor(self, func):
-        """监控cloudscraper的工作状态，遇到不支持的Challenge时尝试退回常规的requests请求"""
+        """监控curl_cffi的工作状态，遇到403时尝试退回常规的requests请求"""
         def wrapper(*args, **kw):
-            # 确保传递SSL验证设置，但避免重复参数
-            kw.setdefault('verify', ssl_verify)
             try:
                 return func(*args, **kw)
             except Exception as e:
-                logger.debug(f"无法通过CloudFlare检测: '{e}', 尝试退回常规的requests请求")
-                # 在退回时也要考虑SSL验证设置，同样避免重复参数
-                # 根据函数名称判断是get还是post请求
-                if 'get' in str(func).lower():
-                    kw_copy = kw.copy()
-                    kw_copy.setdefault('verify', ssl_verify)
-                    # 如果是SSL错误，尝试禁用SSL验证
-                    if 'SSLError' in str(type(e)) or 'EOF occurred in violation of protocol' in str(e):
-                        kw_copy['verify'] = False
-                    try:
-                        return requests.get(*args, **kw_copy)
-                    except Exception as fallback_error:
-                        logger.debug(f"退回常规请求也失败: {fallback_error}")
-                        raise  # 仍然抛出原始异常，但保持了错误处理链
+                error_msg = str(e).lower()
+                # 如果是403错误，尝试退回常规requests请求
+                if '403' in error_msg or 'forbidden' in error_msg:
+                    logger.debug(f"curl_cffi返回403错误: '{e}', 尝试退回常规的requests请求")
+                    # 根据函数名称判断是get还是post请求
+                    if 'get' in str(func).lower():
+                        kw_copy = kw.copy()
+                        kw_copy.setdefault('verify', ssl_verify)
+                        try:
+                            return requests.get(*args, **kw_copy)
+                        except Exception as fallback_error:
+                            logger.debug(f"退回常规请求也失败: {fallback_error}")
+                            raise
+                    else:
+                        kw_copy = kw.copy()
+                        kw_copy.setdefault('verify', ssl_verify)
+                        try:
+                            return requests.post(*args, **kw_copy)
+                        except Exception as fallback_error:
+                            logger.debug(f"退回常规请求也失败: {fallback_error}")
+                            raise
                 else:
-                    kw_copy = kw.copy()
-                    kw_copy.setdefault('verify', ssl_verify)
-                    # 如果是SSL错误，尝试禁用SSL验证
-                    if 'SSLError' in str(type(e)) or 'EOF occurred in violation of protocol' in str(e):
-                        kw_copy['verify'] = False
-                    try:
-                        return requests.post(*args, **kw_copy)
-                    except Exception as fallback_error:
-                        logger.debug(f"退回常规请求也失败: {fallback_error}")
-                        raise  # 仍然抛出原始异常，但保持了错误处理链
+                    raise
         return wrapper
 
     def _create_request_wrapper(self, original_func):
@@ -191,6 +201,19 @@ class Request():
                                proxies=self.proxies,
                                cookies=self.cookies,
                                timeout=self.timeout)
+                # 检测 403 响应，curl_cffi 可能不会抛出异常
+                if r.status_code == 403:
+                    logger.debug(f"curl_cffi 返回 403，尝试退回常规 requests: {url}")
+                    try:
+                        r = requests.get(url,
+                                        headers=self.headers,
+                                        proxies=self.proxies,
+                                        cookies=self.cookies,
+                                        timeout=self.timeout,
+                                        verify=ssl_verify)
+                    except Exception as fallback_error:
+                        logger.debug(f"退回常规请求也失败: {fallback_error}")
+                        raise
             else:
                 r = self.__get(url,
                                headers=self.headers,
@@ -417,12 +440,20 @@ def request_post(url, data, cookies={}, timeout=None, delay_raise=False, verify_
     return r
 
 
-def get_resp_text(resp: Response, encoding=None):
+def get_resp_text(resp, encoding=None):
     """提取Response的文本"""
     if encoding:
         resp.encoding = encoding
     else:
-        resp.encoding = resp.apparent_encoding
+        # 优先使用 apparent_encoding（requests）
+        if hasattr(resp, 'apparent_encoding') and resp.apparent_encoding:
+            resp.encoding = resp.apparent_encoding
+        # curl_cffi 已自动检测编码
+        elif resp.encoding:
+            pass
+        # 最后回退到 UTF-8
+        else:
+            resp.encoding = 'utf-8'
     return resp.text
 
 
@@ -490,29 +521,73 @@ def is_connectable(url, timeout=3):
         return False
 
 
-def urlretrieve(url, filename=None, reporthook=None, headers=None):
+def urlretrieve(url, filename=None, reporthook=None, headers=None, max_retry=3, retry_delay=1):
     if "arzon" in url:
         headers["Referer"] = "https://www.arzon.jp/"
-    """使用requests实现urlretrieve"""
+    """使用requests实现urlretrieve，带重试机制"""
     # https://blog.csdn.net/qq_38282706/article/details/80253447
-    with contextlib.closing(_global_session.get(url, headers=headers,
-                                                proxies=read_proxy(), stream=True, verify=ssl_verify)) as r:
-        header = r.headers
-        with open(filename, 'wb+') as fp:
-            bs = 1024
-            size = -1
-            blocknum = 0
-            if "content-length" in header:
-                size = int(header["Content-Length"])    # 文件总大小（理论值）
-            if reporthook:                              # 写入前运行一次回调函数
-                reporthook(blocknum, bs, size)
-            for chunk in r.iter_content(chunk_size=1024):
-                if chunk:
-                    fp.write(chunk)
-                    fp.flush()
-                    blocknum += 1
-                    if reporthook:
-                        reporthook(blocknum, bs, size)  # 每写入一次运行一次回调函数
+    
+    for attempt in range(1, max_retry + 1):
+        try:
+            with contextlib.closing(_global_session.get(url, headers=headers,
+                                                        proxies=read_proxy(), stream=True, verify=ssl_verify)) as r:
+                header = r.headers
+                with open(filename, 'wb+') as fp:
+                    bs = 1024
+                    size = -1
+                    blocknum = 0
+                    if "content-length" in header:
+                        size = int(header["Content-Length"])    # 文件总大小（理论值）
+                    if reporthook:                              # 写入前运行一次回调函数
+                        reporthook(blocknum, bs, size)
+                    for chunk in r.iter_content(chunk_size=1024):
+                        if chunk:
+                            fp.write(chunk)
+                            fp.flush()
+                            blocknum += 1
+                            if reporthook:
+                                reporthook(blocknum, bs, size)  # 每写入一次运行一次回调函数
+            return  # 成功则直接返回
+        except requests.exceptions.SSLError as e:
+            logger.debug(f"下载 {url} 第 {attempt} 次失败 (SSL错误): {e}")
+            if attempt < max_retry:
+                time.sleep(retry_delay)
+                # 尝试禁用SSL验证重试
+                logger.debug(f"尝试禁用SSL验证重试: {url}")
+                try:
+                    with contextlib.closing(_global_session.get(url, headers=headers,
+                                                                proxies=read_proxy(), stream=True, verify=False)) as r:
+                        header = r.headers
+                        with open(filename, 'wb+') as fp:
+                            bs = 1024
+                            size = -1
+                            blocknum = 0
+                            if "content-length" in header:
+                                size = int(header["Content-Length"])
+                            if reporthook:
+                                reporthook(blocknum, bs, size)
+                            for chunk in r.iter_content(chunk_size=1024):
+                                if chunk:
+                                    fp.write(chunk)
+                                    fp.flush()
+                                    blocknum += 1
+                                    if reporthook:
+                                        reporthook(blocknum, bs, size)
+                    return  # 成功则直接返回
+                except Exception as e2:
+                    logger.debug(f"禁用SSL验证重试也失败: {e2}")
+                    if attempt < max_retry:
+                        time.sleep(retry_delay)
+            else:
+                logger.error(f"下载 {url} 失败 (SSL错误): {e}")
+                raise
+        except Exception as e:
+            logger.debug(f"下载 {url} 第 {attempt} 次失败: {e}")
+            if attempt < max_retry:
+                time.sleep(retry_delay)
+            else:
+                logger.error(f"下载 {url} 失败: {e}")
+                raise
 
 
 def download(url, output_path, desc=None):

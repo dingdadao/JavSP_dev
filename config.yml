@@ -11,7 +11,7 @@ scanner:
     - "Carib(beancom)?"
     - '[^a-z\d](f?hd|lt)[^a-z\d]'
   # 整理哪个文件夹下的影片？（此项留空时将在运行时询问）
-  input_directory: /mnt/nas/download
+  input_directory: /Volumes/data/download
   # 哪些后缀的文件应当视为影片？
   filename_extensions:
     [
@@ -43,6 +43,8 @@ scanner:
   minimum_size: 232MiB
   skip_nfo_dir: no
   manual: no
+  # 重新扫描时是否清理 .skipped 文件（设为 yes 可以解决文件数不变的问题）
+  clear_skipped_on_rescan: yes
 ################################
 network:
   # 设置代理服务器地址，支持 http, socks5/socks5h 代理，比如'http://127.0.0.1:1080'
@@ -58,6 +60,18 @@ network:
   retry: 3
   # https://en.wikipedia.org/wiki/ISO_8601#Durations
   timeout: PT10S
+  # 站点 Cookie 配置（可选，用于需要登录的站点）
+  # 如果程序无法读取浏览器 Cookie 文件时（PermissionError），可在此手动填入 Cookie
+  # 注意：javdb_cookie 里的 locale 必须设为 zh，否则 JavDB 返回英文页面导致 xpath 解析失败
+  site_cookies:
+    javdb:
+      list_mode: "h"
+      theme: "auto"
+      locale: "zh"
+      over18: "1"
+      # 如果需要，可以添加 cf_clearance 和 _jdb_session 等 Cookie
+      # cf_clearance: "your_cf_clearance_cookie"
+      # _jdb_session: "your_jdb_session_cookie"
 
 ################################
 crawler:
@@ -96,9 +110,9 @@ summarizer:
   # 路径相关的选项
   path:
     # 存放影片、封面等文件的文件夹路径
-    output_folder_pattern: "/mnt/nas/JapanMovie/{actress}/{title}"
+    output_folder_pattern: "/Volumes/data/JapanMovie/{actress}/{title}"
     # 影片、封面、nfo信息文件等的文件名将基于下面的规则来创建
-    basename_pattern: "[{num}] {title}"
+    basename_pattern: "[{num}]"
     # 允许的最长文件路径（路径过长时将据此自动截短标题）
     length_maximum: 250
     # 是否以字节数来计算文件路径长度
@@ -112,6 +126,14 @@ summarizer:
   title:
     # 删除尾部可能存在的女优名
     remove_trailing_actor_name: true
+
+  # 重复文件处理策略
+  duplicate_file:
+    # 处理策略: auto_select(自动选择), manual(手动选择), skip(跳过)
+    # auto_select 会优先选择带 -C 的文件（带字幕），如果大小差异超过阈值则选择大文件
+    strategy: auto_select
+    # 自动选择时，文件大小差异阈值（字节），小于此值则跳过
+    size_threshold: 1048576  # 1MB (1024*1024)
 
   # 下面这些项用来设置对应变量为空时的替代信息
   default:
@@ -127,7 +149,7 @@ summarizer:
     # nfo文件的名称
     basename_pattern: "movie"
     # nfo文件中的影片标题（即媒体管理工具中显示的标题）
-    title_pattern: "{num} {title}"
+    title_pattern: "{title}"
     # 要添加到自定义分类的字段，空列表表示不添加
     custom_genres_fields: ["{genre}", "{censor}"]
     # 要添加到自定义标签的字段，空列表表示不添加
@@ -182,6 +204,8 @@ translator:
     #   # 百度翻译的APP ID和密钥
     app_id: "1BKABrHJdBrLtJtxQvlyYi7r"
     api_key: "xlknIh8NbZiq7ksRBhDpySDGUdmCWAUq"
+    max_retry: 2
+    retry_delay: 1
   ## }}}
   ## 使用必应翻译: {{{
   # engine:

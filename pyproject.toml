@@ -13,7 +13,7 @@ format = "v{base}.{distance}"
 
 [tool.poetry.dependencies]
 python = "<3.13,>=3.10"
-cloudscraper = "1.2.71"
+curl_cffi = "^0.7.0"
 colorama = "0.4.4"
 pillow = "10.2.0"
 pretty-errors = "1.2.19"
@@ -29,7 +29,8 @@ confz = "^2.0.1"
 pydantic-extra-types = "^2.9.0"
 pendulum = "^3.0.0"
 #slimeface = { git = "https://github.com/misaka18931/slimeface.git", rev = "v2024.9.27" }
-win32crypt = "^0.0.1"
+# win32crypt 是 Windows 系统模块，随 pywin32 提供，不需要单独安装
+# win32crypt = {version = "^0.0.1", markers = "sys_platform == 'win32'"}
 
 
 [tool.poetry.scripts]

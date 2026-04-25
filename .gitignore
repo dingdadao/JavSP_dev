@@ -135,3 +135,8 @@ ver_hook.py
 .idea
 .vscode
 test
+./idea/
+.pytest_cache/
+./config.yml
+.skipped
+ 

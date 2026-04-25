@@ -6,6 +6,7 @@ import shutil
 import logging
 import hashlib
 from functools import cached_property
+from tqdm import tqdm
 
 from javsp.config import Cfg
 from javsp.lib import resource_path, detect_special_attr
@@ -278,11 +279,15 @@ class Movie:
             else:
                 filtered_target_paths.append((src, dst))
 
-        # 执行移动操作
-        for src, dst in filtered_target_paths:
-            moved_path = move_file(src, dst)
-            if moved_path:  # 只有在文件确实被移动时才添加到列表
-                new_paths.append(moved_path)
+        # 执行移动操作，带进度条
+        if filtered_target_paths:
+            action_name = "创建硬链接" if use_hardlink else "移动文件"
+            for src, dst in tqdm(filtered_target_paths, desc=action_name, unit="file"):
+                moved_path = move_file(src, dst)
+                if moved_path:  # 只有在文件确实被移动时才添加到列表
+                    new_paths.append(moved_path)
+        else:
+            logger.debug("没有需要移动的文件（所有目标文件已存在）")
 
         self.new_paths = new_paths
 
