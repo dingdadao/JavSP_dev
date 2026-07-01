@@ -6,7 +6,7 @@ from javsp.web.exceptions import *
 from javsp.datatype import MovieInfo
 
 
-request = Request()
+request = Request(use_scraper=True)
 
 logger = logging.getLogger(__name__)
 base_url = 'https://mrzyx.xyz'

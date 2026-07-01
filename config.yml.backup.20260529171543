@@ -11,8 +11,7 @@ scanner:
     - "Carib(beancom)?"
     - '[^a-z\d](f?hd|lt)[^a-z\d]'
   # 整理哪个文件夹下的影片？（此项留空时将在运行时询问）
-  #input_directory: /Volumes/data/goodStuff/download
-  input_directory: /Volumes/data/download
+  input_directory: /Volumes/data/goodStuff/download
   # 哪些后缀的文件应当视为影片？
   filename_extensions:
     [
@@ -139,9 +138,6 @@ summarizer:
     strategy: auto_select
     # 自动选择时，文件大小差异阈值（字节），小于此值则跳过
     size_threshold: 1048576  # 1MB (1024*1024)
-    # 自动解决重复文件冲突 (0=关闭, 1=开启)
-    # 开启后，当同一番号有多个文件时，自动按优先级选择：-C(字幕) > -UC(无修正) > -U(普通)
-    auto_resolve_duplicate: 1
 
   # 下面这些项用来设置对应变量为空时的替代信息
   default:
@@ -174,7 +170,7 @@ summarizer:
     basename_pattern: "poster"
     # 尽可能下载高清封面？（高清封面大小约 8-10 MiB，远大于普通封面，如果你的网络条件不佳，会降低整理速度）
     highres: true
-    # 在封面图上添加水印（标签），例如"字幕"
+    # 在封面图上添加水印（标签），例如“字幕”
     add_label: false
     crop:
       # 要使用图像识别来裁剪的番号系列需要匹配的正则表达式
@@ -207,7 +203,7 @@ summarizer:
 
 ################################
 translator:
-  # 翻译引擎，可选: google, bing, baidu, claude(haiku), openai, localai （Google可以直接免费使用。留空表示禁用翻译功能）
+  # 翻译引擎，可选: google, bing, baidu, claude(haiku), openai （Google可以直接免费使用。留空表示禁用翻译功能）
   # 进阶功能的文档 https://github.com/Yuukiy/JavSP/wiki/Translation-%7C-%E7%BF%BB%E8%AF%91
   ## 使用百度翻译: {{{
   # engine:
@@ -239,18 +235,18 @@ translator:
   #   # 要使用的模型（默认使用 Groq 的 llama-3.1-70b-versatile 模型，若使用 OpenAI 官方 API 的话一般模型为 gpt-3.5-turbo）
   #   model: qwen/qwen2.5-vl-7b
   # }}}
-  ## 使用本地AI翻译 (LM Studio + hy-mt2-7b): {{{
+  ## 使用本地AI翻译 (支持 Ollama, LocalAI, vLLM 等): {{{
   engine:
     name: localai
-    # LM Studio 默认 API 地址 (如需修改端口，在 LM Studio > Developer > Server Port 中设置)
-    url: "http://localhost:1234"
-    # API密钥（LM Studio 默认不需要，留空即可）
+    # 本地AI API地址（根据你的服务修改端口）
+    url: 'http://localhost:8000'
+    # API密钥（如果没有设置可以留空）
     api_key: ''
-    # 模型名称：hy-mt2-7b
-    model: hy-mt2-7b
+    # 模型名称：facebook/nllb-200-distilled-600M
+    model: facebook/nllb-200-distilled-600M
     max_retry: 3
     retry_delay: 2
-  ## }}}
+  # }}}
 
   # 是否翻译各个字段
   fields:

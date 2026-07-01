@@ -1,4 +1,6 @@
 """与操作nfo文件相关的功能"""
+import logging
+from datetime import datetime
 from lxml.etree import tostring
 from lxml.builder import E
 
@@ -7,20 +9,53 @@ from javsp.datatype import MovieInfo
 from javsp.config import Cfg
 
 
+logger = logging.getLogger(__name__)
+
+
 def write_nfo(info: MovieInfo, nfo_file):
     """将存储了影片信息的'info'写入到nfo文件中"""
     # NFO spec: https://kodi.wiki/view/NFO_files/Movies
     nfo = E.movie()
     dic = info.get_info_dic()
 
-    if info.nfo_title:
-        nfo.append(E.title(info.nfo_title))
-    else:
-        nfo.append(E.title(info.title))
+    # 标题：优先使用 nfo_title（由 title_pattern 生成），否则使用原始标题
+    display_title = info.nfo_title if info.nfo_title else info.title
+    nfo.append(E.title(display_title))
+    
+    # sorttitle：用于排序和某些媒体库的显示（如飞牛 NAS）
+    # 使用番号作为 sorttitle，确保可以按番号排序
+    if info.dvdid:
+        nfo.append(E.sorttitle(info.dvdid))
+    elif info.cid:
+        nfo.append(E.sorttitle(info.cid))
+    
+    # 飞牛 NAS 兼容模式：添加飞牛特定的字段
+    fnos_compatible = Cfg().summarizer.nfo.fnos_compatible
+    logger.debug(f"飞牛兼容模式: {fnos_compatible}")
+    if fnos_compatible:
+        logger.info("启用飞牛 NAS 兼容模式，添加飞牛特定字段")
+        # 飞牛可能优先读取 <name> 字段而不是 <title>
+        nfo.append(E.name(display_title))
+        # 添加番号到 customid 字段（飞牛可能用此字段识别）
+        if info.dvdid:
+            nfo.append(E.customid(info.dvdid))
+        # 飞牛需要 <dateadded> 字段
+        nfo.append(E.dateadded(datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        # 飞牛需要 <lockdata> 字段
+        nfo.append(E.lockdata('false'))
+        # 飞牛需要 <year> 字段（从 publish_date 提取）
+        if info.publish_date:
+            year = info.publish_date.split('-')[0]
+            nfo.append(E.year(year))
 
-    # 仅在标题被处理过时'ori_title'字段才会有值
-    if info.ori_title:
+    # 仅在标题被成功翻译过时才写入 originaltitle
+    # 爬虫设置的原文（如 JavDB 的日文标题）不写入，避免飞牛显示错误
+    if getattr(info, 'ori_title', None) and getattr(info, '_title_translated', False):
         nfo.append(E.originaltitle(info.ori_title))
+    
+    # 仅在简介被成功翻译过时才写入 originalplot
+    if getattr(info, 'ori_plot', None) and getattr(info, '_plot_translated', False):
+        nfo.append(E.originalplot(info.ori_plot))
 
     # Kodi的文档中评分支持多个来源，但经测试，添加了多个评分时Kodi也只显示了第一个评分
     if info.score:
@@ -30,7 +65,10 @@ def write_nfo(info: MovieInfo, nfo_file):
     # 而且无论是Kodi还是Jellyfin中都没有找到实际显示outline的位置；tagline倒是都有发现
 
     if info.plot:
+        logger.debug(f"写入简介: {info.plot[:50]}...")
         nfo.append(E.plot(info.plot))
+    else:
+        logger.debug("没有简介数据，跳过 <plot> 字段")
 
     # 目前没有合适的字段用于tagline（一行简短的介绍）
 
@@ -109,9 +147,20 @@ def write_nfo(info: MovieInfo, nfo_file):
             else:
                 nfo.append(E.actor(E.name(i)))
 
-    with open(nfo_file, 'wt', encoding='utf-8') as f:
-        f.write(tostring(nfo, encoding='unicode', pretty_print=True,
-                         doctype='<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>'))
+    # 根据飞牛兼容模式选择不同的 XML 声明格式
+    if fnos_compatible:
+        # 飞牛格式：使用 utf-8 编码声明，有 standalone="yes" 属性
+        nfo_content = tostring(nfo, encoding='unicode', pretty_print=True,
+                              doctype='<?xml version="1.0" encoding="utf-8" standalone="yes"?>')
+        # 飞牛要求 UTF-8 无 BOM 编码，使用 \n 换行
+        with open(nfo_file, 'wt', encoding='utf-8', newline='\n') as f:
+            f.write(nfo_content)
+    else:
+        # 标准 Jellyfin/Kodi 格式
+        nfo_content = tostring(nfo, encoding='unicode', pretty_print=True,
+                              doctype='<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>')
+        with open(nfo_file, 'wt', encoding='utf-8') as f:
+            f.write(nfo_content)
 
 
 if __name__ == "__main__":

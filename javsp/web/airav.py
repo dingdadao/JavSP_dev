@@ -72,7 +72,9 @@ def parse_data(movie: MovieInfo):
     movie.dvdid = dvdid
     movie.url = base_url + '/video/' + dvdid
     # plot和title中可能含有HTML的转义字符，需要进行解转义处理
-    movie.plot = unescape(data['description']) or None
+    plot_raw = data.get('description')
+    logger.debug(f"airav 获取到简介原文: {plot_raw[:100] if plot_raw else 'None'}...")
+    movie.plot = unescape(plot_raw) or None if plot_raw else None
     movie.cover = data['img_url']
     # airav的genre是以搜索关键词的形式组织的，没有特定的genre_id
     movie.genre = [i['name'] for i in data['tags']]

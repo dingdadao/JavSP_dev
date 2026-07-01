@@ -49,7 +49,9 @@ def parse_data(movie: MovieInfo):
     title = item.xpath("//div[@class='detail_title_new2']//h1/text()")[0]
     cover = item.xpath("//td[@align='center']//a/img/@src")[0]
     item_text = item.xpath("//div[@class='item_text']/text()")
-    plot = [item.strip() for item in item_text if item.strip() != ''][0]
+    plot_list = [item.strip() for item in item_text if item.strip() != '']
+    logger.debug(f"arzon 获取到简介文本: {plot_list}")
+    plot = plot_list[0] if plot_list else None
     preview_pics_arr = item.xpath("//div[@class='detail_img']//img/@src")
     # 使用列表推导式添加 "http:" 并去除 "m_"
     preview_pics = [("https:" + url).replace("m_", "")

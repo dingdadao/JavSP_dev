@@ -48,12 +48,18 @@ else:
         level=logging.INFO,
         format='%(message)s'
     )
+    # 禁用 urllib3 的重试日志
+    logging.getLogger('urllib3.connectionpool').setLevel(logging.WARNING)
+    logging.getLogger('urllib3.util.retry').setLevel(logging.WARNING)
 
 # 全局变量，用于跟踪程序状态
 _shutdown_requested = False
 _current_movie_index = 0
 _total_movies = 0
 _processed_count = 0
+
+# 全局锁，保护curl_cffi session的并发访问
+download_lock = threading.Lock()
 
 
 def graceful_shutdown(signum=None, frame=None):
@@ -251,6 +257,14 @@ def info_summary(movie: Movie, all_info: Dict[str, MovieInfo]):
                 if current is None and incoming is not None:
                     setattr(final_info, attr, incoming)
                     absorbed.append(attr)
+            elif attr == 'plot':
+                # plot 字段特殊处理：允许后面的爬虫补充（因为 JavDB 不提供简介）
+                if incoming and (not current or len(incoming) > len(current)):
+                    logger.debug(f"从'{name}'获取简介: {incoming[:50]}...")
+                    setattr(final_info, attr, incoming)
+                    absorbed.append(attr)
+                elif incoming:
+                    logger.debug(f"'{name}'有简介但已存在更长的，跳过")
             else:
                 if not current and incoming:
                     setattr(final_info, attr, incoming)
@@ -321,6 +335,13 @@ def info_summary(movie: Movie, all_info: Dict[str, MovieInfo]):
 
     ########## 将最终数据附加到电影对象 ##########
     movie.info = final_info
+    
+    # 调试：输出最终简介信息
+    if final_info.plot:
+        logger.debug(f"最终简介: {final_info.plot[:50]}...")
+    else:
+        logger.debug("最终简介为空")
+    
     return True
 
 
@@ -845,7 +866,7 @@ def download_extrafanart_concurrent(movie, extrafanartdir, progress_bar):
     逻辑：
     1. 根据max_download_count限制下载数量
     2. 使用concurrent_downloads控制并发数
-    3. 一次性提交所有任务，让线程池自动管理并发
+    3. 使用线程锁保护curl_cffi session，避免线程安全问题
     """
     import concurrent.futures
     import threading
@@ -862,7 +883,9 @@ def download_extrafanart_concurrent(movie, extrafanartdir, progress_bar):
             progress_bar.set_description(
                 f"Downloading extrafanart {id} from url: {pic_url}")
 
-            info = download(pic_url, fanart_destination)
+            # 使用线程锁保护下载操作
+            with download_lock:
+                info = download(pic_url, fanart_destination)
             if valid_pic(fanart_destination):
                 filesize = get_fmt_size(fanart_destination)
                 width, height = get_pic_size(fanart_destination)

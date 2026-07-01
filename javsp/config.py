@@ -58,7 +58,7 @@ class Network(BaseConfig):
     # 重试配置
     retry_total: int = 3
     retry_backoff_factor: float = 1.0
-    retry_status_forcelist: list[int] = [429, 500, 502, 503, 504]
+    retry_status_forcelist: list[int] = [429, 500, 502, 503, 504, 521]  # 521: CloudFlare Web Server Is Down
     # 站点 Cookie 配置（可选，用于需要登录的站点）
     # 格式: JSON 字符串或键值对，例如: '{"javdb": {"cookie1": "value1", "cookie2": "value2"}}'
     site_cookies: Dict[str, Dict[str, str]] = {}
@@ -168,6 +168,9 @@ class DuplicateFilePolicy(BaseConfig):
     strategy: str = 'auto_select'
     # 自动选择时，文件大小差异阈值（字节），小于此值则跳过
     size_threshold: int = 1024 * 1024  # 1MB
+    # 自动解决重复文件冲突 (0=关闭, 1=开启)
+    # 开启后，当同一番号有多个文件时，自动按优先级选择：-C(字幕) > -UC(无修正) > -U(普通)
+    auto_resolve_duplicate: int = 0
 
 
 class NFOSummarize(BaseConfig):
@@ -175,6 +178,8 @@ class NFOSummarize(BaseConfig):
     title_pattern: str
     custom_genres_fields: list[str]
     custom_tags_fields: list[str]
+    # 飞牛 NAS 兼容模式：添加飞牛特定的字段和格式
+    fnos_compatible: bool = False
 
 
 class ExtraFanartSummarize(BaseConfig):

@@ -3,13 +3,15 @@ import re
 import logging
 
 
-from javsp.web.base import post_html
+from javsp.web.base import Request, post_html
 from javsp.web.exceptions import *
 from javsp.datatype import MovieInfo
 
 
 logger = logging.getLogger(__name__)
 base_url = 'https://www.jav321.com'
+# 使用 curl_cffi 绕过 TLS 指纹检测
+request = Request(use_scraper=True)
 
 
 def parse_data(movie: MovieInfo):

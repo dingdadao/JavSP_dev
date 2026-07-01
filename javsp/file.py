@@ -238,30 +238,66 @@ def scan_movies(root: str) -> List[Movie]:
             # 获取文件大小
             file_sizes = [(f, os.path.getsize(f)) for f in files]
             
-            # 优先选择带 -C 的文件（带字幕）
-            def has_subtitle_marker(filepath):
-                """检查文件名是否带 -C 标记（带字幕）"""
+            # 检查文件名标记优先级
+            def get_file_priority(filepath):
+                """
+                获取文件优先级
+                优先级：-C(字幕) > -UC(无修正) > -U(普通)
+                返回数值越小优先级越高
+                """
                 basename = os.path.basename(filepath).upper()
-                # 匹配 -C. 或 -C/ 或 -C结尾
-                return bool(re.search(r'-C[./\\]?$|-C$', basename))
+                # 检查 -C (字幕版)
+                if re.search(r'-C[./\\]?$|-C[^A-Z]', basename):
+                    return 0
+                # 检查 -UC (无修正/无码版)
+                elif re.search(r'-UC[./\\]?$|-UC[^A-Z]', basename):
+                    return 1
+                # 检查 -U (普通版)
+                elif re.search(r'-U[./\\]?$|-U[^A-Z]', basename):
+                    return 2
+                # 其他
+                return 3
             
-            # 先按是否带字幕排序，再按大小排序
+            # 排序：优先级 > 文件大小（降序）> 创建时间（最新的优先）
             file_sizes.sort(key=lambda x: (
-                0 if has_subtitle_marker(x[0]) else 1,  # 带字幕的优先
-                -x[1]  # 大小降序
+                get_file_priority(x[0]),  # 优先级
+                -x[1],  # 大小降序
+                -os.path.getctime(x[0])  # 创建时间降序（最新的优先）
             ))
             
             best_file = file_sizes[0]
             second_best = file_sizes[1] if len(file_sizes) > 1 else None
+            
+            # 获取优先级标记文本
+            def get_priority_mark(priority):
+                if priority == 0:
+                    return "（带字幕）"
+                elif priority == 1:
+                    return "（无修正）"
+                elif priority == 2:
+                    return "（普通）"
+                return ""
+            
+            # 检查是否开启自动解决重复文件冲突
+            auto_resolve = getattr(Cfg().summarizer.duplicate_file, 'auto_resolve_duplicate', 0)
             
             # 检查大小差异
             if second_best and (best_file[1] - second_best[1]) > size_threshold:
                 # 大小差异明显，自动选择
                 if strategy == 'auto_select':
                     resolved[avid] = [best_file[0]]
-                    subtitle_mark = "（带字幕）" if has_subtitle_marker(best_file[0]) else ""
-                    logger.info(f"自动选择文件 {avid}: {os.path.basename(best_file[0])} ({get_fmt_size(best_file[1])}){subtitle_mark}")
+                    priority = get_file_priority(best_file[0])
+                    mark = get_priority_mark(priority)
+                    logger.info(f"自动选择文件 {avid}: {os.path.basename(best_file[0])} ({get_fmt_size(best_file[1])}){mark}")
                     continue
+            
+            # 如果开启了 auto_resolve_duplicate，自动选择优先级最高的文件
+            if auto_resolve == 1:
+                resolved[avid] = [best_file[0]]
+                priority = get_file_priority(best_file[0])
+                mark = get_priority_mark(priority)
+                logger.info(f"自动选择文件 {avid}: {os.path.basename(best_file[0])} ({get_fmt_size(best_file[1])}){mark}")
+                continue
             
             # 需要手动选择或跳过
             if strategy == 'skip':
@@ -270,8 +306,9 @@ def scan_movies(root: str) -> List[Movie]:
                 # 显示选项
                 print(f"\n发现重复文件 {avid}:")
                 for idx, (f, size) in enumerate(file_sizes, 1):
-                    subtitle_mark = " [带字幕]" if has_subtitle_marker(f) else ""
-                    print(f"  {idx}. {os.path.relpath(f, root)} ({get_fmt_size(size)}){subtitle_mark}")
+                    priority = get_file_priority(f)
+                    mark = get_priority_mark(priority)
+                    print(f"  {idx}. {os.path.relpath(f, root)} ({get_fmt_size(size)}){mark}")
                 
                 # 提示用户选择
                 if Cfg().other.interactive:

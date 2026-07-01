@@ -28,13 +28,17 @@ logger = logging.getLogger(__name__)
 def translate_movie_info(info: MovieInfo):
     """根据配置翻译影片信息"""
     # 翻译标题
-    if info.title and Cfg().translator.fields.title and info.ori_title is None:
+    # 注意：如果 ori_title 已经有值（如 JavDB 设置了日文原标题），仍然需要翻译
+    if info.title and Cfg().translator.fields.title and not hasattr(info, '_title_translated'):
         try:
             result = translate(
                 info.title, Cfg().translator.engine, info.actress)
             if result and 'trans' in result:
+                # 保存原文到 ori_title（标记为已翻译的原文）
                 info.ori_title = info.title
                 info.title = result['trans']
+                # 标记标题已翻译成功
+                setattr(info, '_title_translated', True)
 
                 # 如果有的话，附加断句信息
                 if 'orig_break' in result:
@@ -43,10 +47,12 @@ def translate_movie_info(info: MovieInfo):
                     setattr(info, 'title_break', result['trans_break'])
             else:
                 logger.error(f"翻译标题时出错: {result.get('error', '未知错误')}")
-                return False
+                # 翻译失败时保留原文，不阻止后续处理
+                info.ori_title = info.title
         except Exception as e:
             logger.error(f"调用翻译服务时出错: {str(e)}")
-            return False
+            # 翻译失败时保留原文，不阻止后续处理
+            info.ori_title = info.title
 
     # 翻译简介
     if info.plot and Cfg().translator.fields.plot:
@@ -54,16 +60,19 @@ def translate_movie_info(info: MovieInfo):
             result = translate(
                 info.plot, Cfg().translator.engine, info.actress)
             if result and 'trans' in result:
-                # 只有翻译过plot的影片才可能需要ori_plot属性
-                if not hasattr(info, 'ori_plot'):
-                    setattr(info, 'ori_plot', info.plot)
+                # 保存原文到 ori_plot（标记为已翻译的原文）
+                setattr(info, 'ori_plot', info.plot)
                 info.plot = result['trans']
+                # 标记简介已翻译成功
+                setattr(info, '_plot_translated', True)
             else:
                 logger.error(f"翻译简介时出错: {result.get('error', '未知错误')}")
-                return False
+                # 翻译失败时保留原文，不阻止后续处理
+                setattr(info, 'ori_plot', info.plot)
         except Exception as e:
             logger.error(f"调用翻译服务时出错: {str(e)}")
-            return False
+            # 翻译失败时保留原文，不阻止后续处理
+            setattr(info, 'ori_plot', info.plot)
 
     return True
 
@@ -524,6 +533,7 @@ def localai_translate(texts, url: str, api_key: str, model: str, to="zh_CN", max
     """
     兼容本地 AI API (如 Ollama, LocalAI, vLLM 等) 的翻译函数，带重试机制
     针对日本成人影片标题和简介优化
+    支持专用翻译模型如 facebook/nllb-200-distilled-600M
     """
     api_url = str(url).rstrip('/') + '/v1/chat/completions'
     headers = {
@@ -537,31 +547,84 @@ def localai_translate(texts, url: str, api_key: str, model: str, to="zh_CN", max
     max_tokens = 256 if is_short_text else 1024
     timeout = 30 if is_short_text else 60
     
-    data = {
-        "model": model,
-        "messages": [
-            {
-                "role": "system",
-                "content": (
-                    f"你是一位专业的日本成人影片翻译专家。"
-                    f"请将以下日文标题或简介翻译成{to}。\n\n"
-                    "翻译规则：\n"
-                    "1. 保留番号不变（如 ABC-123, SSIS-999 等格式）\n"
-                    "2. 保留女优、男优的日文原名（人名不翻译）\n"
-                    "3. 保留制作商、系列名称等专有名词（如 S1, MOODYZ, kira☆kira 等）\n"
-                    "4. 准确翻译成人相关术语和描述内容\n"
-                    "5. 保持原标题的语序和风格，不要过度意译\n"
-                    "6. 只返回翻译结果，不要添加任何额外说明或解释"
-                )
-            },
-            {
-                "role": "user",
-                "content": texts
+    # 检测是否为专用翻译模型（如 NLLB, hy-mt2-7b 等）
+    is_translation_model = any(x in model.lower() for x in ['nllb', 'translation', 'translator', 'hy-mt2', 'mt2-7b'])
+    
+    if is_translation_model:
+        # 检测是否为 hy-mt2-7b 模型
+        is_hy_mt2 = 'hy-mt2' in model.lower() or 'mt2-7b' in model.lower()
+        
+        if is_hy_mt2:
+            # hy-mt2-7b 专用提示词 - 针对日译中优化
+            data = {
+                "model": model,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "你是一个专业的日语翻译助手，专门翻译日本成人影片的标题和简介。\n"
+                            "请将日文翻译成自然流畅的中文。\n\n"
+                            "翻译要求：\n"
+                            "1. 番号保留原样（如 SSIS-123、ABC-456 等）\n"
+                            "2. 人名（女优、男优）保留日文原名不翻译\n"
+                            "3. 片商、系列名保留原样（如 S1、MOODYZ、SOD 等）\n"
+                            "4. 日文语气词适当转换，使中文更自然\n"
+                            "5. 成人术语翻译准确但不过度直白\n"
+                            "6. 只输出翻译结果，不要解释"
+                        )
+                    },
+                    {
+                        "role": "user",
+                        "content": f"请将以下内容翻译成中文：\n\n{texts}"
+                    }
+                ],
+                "temperature": 0.1,
+                "max_tokens": max_tokens,
             }
-        ],
-        "temperature": 0,
-        "max_tokens": max_tokens,
-    }
+        else:
+            # NLLB 等其他专用翻译模型使用简化格式
+            data = {
+                "model": model,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "Translate from Japanese to Chinese. Keep AV codes and names unchanged."
+                    },
+                    {
+                        "role": "user",
+                        "content": texts
+                    }
+                ],
+                "temperature": 0.1,
+                "max_tokens": max_tokens,
+            }
+    else:
+        # 通用 LLM 使用详细提示词
+        data = {
+            "model": model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        f"你是一位专业的日本成人影片翻译专家。"
+                        f"请将以下日文标题或简介翻译成{to}。\n\n"
+                        "翻译规则：\n"
+                        "1. 保留番号不变（如 ABC-123, SSIS-999 等格式）\n"
+                        "2. 保留女优、男优的日文原名（人名不翻译）\n"
+                        "3. 保留制作商、系列名称等专有名词（如 S1, MOODYZ, kira☆kira 等）\n"
+                        "4. 准确翻译成人相关术语和描述内容\n"
+                        "5. 保持原标题的语序和风格，不要过度意译\n"
+                        "6. 只返回翻译结果，不要添加任何额外说明或解释"
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": texts
+                }
+            ],
+            "temperature": 0,
+            "max_tokens": max_tokens,
+        }
 
     for attempt in range(1, max_retry + 1):
         try:
@@ -594,11 +657,26 @@ def localai_translate(texts, url: str, api_key: str, model: str, to="zh_CN", max
             }
 
         except requests.exceptions.RequestException as e:
-            logger.debug(f"本地AI翻译第 {attempt} 次失败: {e}")
-            if attempt < max_retry:
-                time.sleep(retry_delay)
+            error_msg = str(e)
+            # 检测LM Studio内存不足错误
+            is_memory_error = any(x in error_msg.lower() for x in [
+                'insufficient memory', 'out of memory', 'oom', 'gpu memory',
+                'channel error', 'compute error', 'failed to decode'
+            ])
+            
+            if is_memory_error:
+                logger.warning(f"本地AI翻译第 {attempt} 次失败 (GPU内存不足): {e}")
+                # 内存不足时使用指数退避，给GPU释放内存的时间
+                wait_time = retry_delay * (2 ** attempt)
+                logger.info(f"等待 {wait_time} 秒后重试...")
+                time.sleep(wait_time)
             else:
-                logger.error(f"本地AI翻译失败: {e}")
+                logger.debug(f"本地AI翻译第 {attempt} 次失败: {e}")
+                if attempt < max_retry:
+                    time.sleep(retry_delay)
+            
+            if attempt >= max_retry:
+                logger.error(f"本地AI翻译失败 (已重试{max_retry}次): {e}")
                 return {
                     "error_code": -1,
                     "error_msg": str(e),

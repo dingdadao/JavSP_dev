@@ -16,7 +16,7 @@ from javsp.datatype import MovieInfo
 logger = logging.getLogger(__name__)
 base_url = 'https://www.dmm.co.jp'
 # 初始化Request实例（要求携带已通过R18认证的cookies，否则会被重定向到认证页面）
-request = Request()
+request = Request(use_scraper=True)
 request.cookies = {'age_check_done': '1'}
 request.headers['Accept-Language'] = 'ja,en-US;q=0.9'
 

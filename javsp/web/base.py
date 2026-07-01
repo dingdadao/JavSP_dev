@@ -154,15 +154,15 @@ class Request():
                 self._create_request_wrapper(self.scraper.head))
 
     def _scraper_monitor(self, func):
-        """监控curl_cffi的工作状态，遇到403时尝试退回常规的requests请求"""
+        """监控curl_cffi的工作状态，遇到403/521时尝试退回常规的requests请求"""
         def wrapper(*args, **kw):
             try:
                 return func(*args, **kw)
             except Exception as e:
                 error_msg = str(e).lower()
-                # 如果是403错误，尝试退回常规requests请求
-                if '403' in error_msg or 'forbidden' in error_msg:
-                    logger.debug(f"curl_cffi返回403错误: '{e}', 尝试退回常规的requests请求")
+                # 如果是403/521错误，尝试退回常规requests请求
+                if '403' in error_msg or 'forbidden' in error_msg or '521' in error_msg:
+                    logger.debug(f"curl_cffi返回错误: '{e}', 尝试退回常规的requests请求")
                     # 根据函数名称判断是get还是post请求
                     if 'get' in str(func).lower():
                         kw_copy = kw.copy()
@@ -359,33 +359,57 @@ class DownloadProgressBar(tqdm):
 
 # 创建全局会话对象以支持连接池
 def _create_global_session():
-    session = requests.Session()
-
-    # 获取配置
-    config = Cfg().network
-
-    # 配置重试策略
-    retry_strategy = Retry(
-        total=config.retry_total,
-        backoff_factor=config.retry_backoff_factor,
-        status_forcelist=config.retry_status_forcelist,
-    )
-    adapter = HTTPAdapter(
-        pool_connections=config.pool_connections,  # 连接池数量
-        pool_maxsize=config.pool_maxsize,          # 最大连接数
-        pool_block=config.pool_block,              # 是否阻塞等待连接
-        max_retries=retry_strategy
-    )
-    session.mount("http://", adapter)
-    session.mount("https://", adapter)
-
-    return session
+    """创建全局会话，默认使用 curl_cffi 模拟浏览器 TLS 指纹"""
+    # 优先使用 curl_cffi 来绕过 CloudFlare 等网站的 TLS 指纹检测
+    try:
+        session = curl_requests.Session(impersonate="chrome120")
+        # 设置代理
+        proxies = read_proxy()
+        if proxies:
+            proxy_url = proxies.get('http') or proxies.get('https')
+            if proxy_url:
+                session.proxies = {'http': proxy_url, 'https': proxy_url}
+        # 设置 SSL 验证
+        session.verify = ssl_verify
+        logger.debug("使用 curl_cffi Session (chrome120)")
+        return session
+    except Exception as e:
+        logger.warning(f"curl_cffi 初始化失败，回退到普通 requests: {e}")
+        # 回退到普通 requests
+        session = requests.Session()
+        
+        # 获取配置
+        config = Cfg().network
+        
+        # 配置重试策略
+        retry_strategy = Retry(
+            total=config.retry_total,
+            backoff_factor=config.retry_backoff_factor,
+            status_forcelist=config.retry_status_forcelist,
+        )
+        adapter = HTTPAdapter(
+            pool_connections=config.pool_connections,
+            pool_maxsize=config.pool_maxsize,
+            pool_block=config.pool_block,
+            max_retries=retry_strategy
+        )
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        
+        return session
 
 
 _global_session = _create_global_session()
 
+# 创建独立的下载session（使用普通requests，线程安全）
+_download_session = requests.Session()
+_download_session.headers.update(headers)
+_download_proxies = read_proxy()
+if _download_proxies:
+    _download_session.proxies.update(_download_proxies)
 
-def request_get(url, cookies={}, timeout=None, delay_raise=False, verify_ssl=None):
+
+def request_get(url, cookies={}, timeout=None, delay_raise=False, verify_ssl=None, use_scraper=False):
     """获取指定url的原始请求"""
     if timeout is None:
         timeout = Cfg().network.timeout.seconds
@@ -394,6 +418,18 @@ def request_get(url, cookies={}, timeout=None, delay_raise=False, verify_ssl=Non
     if verify_ssl is None:
         verify_ssl = ssl_verify
 
+    # 如果全局会话已经是 curl_cffi，直接使用
+    if hasattr(_global_session, 'impersonate'):
+        try:
+            r = _global_session.get(url, headers=headers, timeout=timeout)
+            if not delay_raise:
+                r.raise_for_status()
+            return r
+        except Exception as e:
+            logger.debug(f"curl_cffi GET 失败: {e}")
+            raise
+
+    # 使用普通 requests
     try:
         r = _global_session.get(url, headers=headers, proxies=read_proxy(),
                                 cookies=cookies, timeout=timeout, verify=verify_ssl)
@@ -414,7 +450,7 @@ def request_get(url, cookies={}, timeout=None, delay_raise=False, verify_ssl=Non
     return r
 
 
-def request_post(url, data, cookies={}, timeout=None, delay_raise=False, verify_ssl=None):
+def request_post(url, data, cookies={}, timeout=None, delay_raise=False, verify_ssl=None, use_scraper=False):
     """向指定url发送post请求"""
     if timeout is None:
         timeout = Cfg().network.timeout.seconds
@@ -423,6 +459,30 @@ def request_post(url, data, cookies={}, timeout=None, delay_raise=False, verify_
     if verify_ssl is None:
         verify_ssl = ssl_verify
 
+    # 如果指定使用 scraper (curl_cffi)，则使用 curl_cffi 发送请求
+    if use_scraper:
+        try:
+            session = _get_curl_session()
+            # 设置代理
+            proxies = read_proxy()
+            if proxies:
+                proxy_url = proxies.get('http') or proxies.get('https')
+                if proxy_url:
+                    session.proxies = {'http': proxy_url, 'https': proxy_url}
+            # 设置 SSL 验证
+            session.verify = verify_ssl
+            # 同步 Cookie
+            if cookies:
+                session.cookies.update(cookies)
+            r = session.post(url, data=data, headers=headers, timeout=timeout)
+            if not delay_raise:
+                r.raise_for_status()
+            return r
+        except Exception as e:
+            # curl_cffi 失败时回退到普通 requests
+            logger.debug(f"curl_cffi POST 失败，回退到普通 requests: {e}")
+    
+    # 使用普通 requests
     try:
         r = _global_session.post(url, data=data, headers=headers, proxies=read_proxy(
         ), cookies=cookies, timeout=timeout, verify=verify_ssl)
@@ -483,9 +543,9 @@ def resp2html(resp, encoding='utf-8') -> lxml.html.HtmlComment:
     return html
 
 
-def post_html(url, data, encoding='utf-8', cookies={}):
+def post_html(url, data, encoding='utf-8', cookies={}, use_scraper=True):
     """使用post方法访问指定网页并返回经lxml解析后的document"""
-    resp = request_post(url, data, cookies=cookies)
+    resp = request_post(url, data, cookies=cookies, use_scraper=use_scraper)
     text = get_resp_text(resp, encoding=encoding)
     html = lxml.html.fromstring(text)
     # jav321提供ed2k形式的资源链接，其中的非ASCII字符可能导致转换失败，因此要先进行处理
@@ -529,8 +589,9 @@ def urlretrieve(url, filename=None, reporthook=None, headers=None, max_retry=3, 
     
     for attempt in range(1, max_retry + 1):
         try:
-            with contextlib.closing(_global_session.get(url, headers=headers,
-                                                        proxies=read_proxy(), stream=True, verify=ssl_verify)) as r:
+            # 使用独立的下载session（普通requests，线程安全）
+            with contextlib.closing(_download_session.get(url, headers=headers,
+                                                        stream=True, verify=ssl_verify)) as r:
                 header = r.headers
                 with open(filename, 'wb+') as fp:
                     bs = 1024

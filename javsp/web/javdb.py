@@ -187,8 +187,8 @@ def parse_data(movie: MovieInfo):
     movie.url = new_url.replace(base_url, permanent_url)
     movie.title = container.xpath(
         "h2/strong[@class='current-title']/text()")[0].replace(movie.dvdid, '').strip()
-    movie.ori_title = container.xpath("h2/span[@class='origin-title']/text()")[0] if container.xpath(
-        "//a[contains(@class, 'meta-link') and not(contains(@style, 'display: none'))]") else None
+    # JavDB 的 origin-title 是日文原标题，但我们在翻译模块中处理 ori_title
+    # 这里不直接设置 ori_title，让翻译模块来管理这个字段
     movie.cover = container.xpath("//img[@class='video-cover']/@src")[0]
     movie.preview_pics = container.xpath(
         "//a[@class='tile-item'][@data-fancybox='gallery']/@href")

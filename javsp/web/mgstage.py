@@ -12,23 +12,33 @@ from javsp.datatype import MovieInfo
 logger = logging.getLogger(__name__)
 base_url = 'https://www.mgstage.com'
 # 初始化Request实例（要求携带已通过R18认证的cookies，否则会被重定向到认证页面）
-request = Request()
+request = Request(use_scraper=True)
 request.cookies = {'adc': '1'}
 
 
 def parse_data(movie: MovieInfo):
     """解析指定番号的影片数据"""
     url = f'{base_url}/product/product_detail/{movie.dvdid}/'
+    logger.debug(f"mgstage 请求 URL: {url}")
     resp = request.get(url, delay_raise=True)
+    logger.debug(f"mgstage 响应状态码: {resp.status_code}")
+    logger.debug(f"mgstage 响应 URL: {resp.url}")
     if resp.status_code == 403:
         raise SiteBlocked('mgstage不允许从当前IP所在地区访问，请尝试更换为日本地区代理')
     # url不存在时会被重定向至主页。history非空时说明发生了重定向
     elif resp.history:
+        logger.debug(f"mgstage 发生重定向，history: {[h.url for h in resp.history]}")
         raise MovieNotFoundError(__name__, movie.dvdid)
 
     html = resp2html(resp)
+    logger.debug(f"mgstage 开始解析 HTML")
     # mgstage的文本中含有大量的空白字符（'\n \t'），需要使用strip去除
-    title = html.xpath("//div[@class='common_detail_cover']/h1/text()")[0].strip()
+    title_tags = html.xpath("//div[@class='common_detail_cover']/h1/text()")
+    logger.debug(f"mgstage 标题标签: {title_tags}")
+    if not title_tags:
+        logger.error("mgstage 无法找到标题，页面结构可能已改变")
+        raise MovieNotFoundError(__name__, movie.dvdid, "无法找到标题")
+    title = title_tags[0].strip()
     container = html.xpath("//div[@class='detail_left']")[0]
     cover = container.xpath("//a[@id='EnlargeImage']/@href")[0]
     # 有链接的女优和仅有文本的女优匹配方法不同，因此分别匹配以后合并列表
@@ -74,7 +84,9 @@ def parse_data(movie: MovieInfo):
                 if child.tail:
                     plots.append(child.tail)
     plot = ''.join(plots).strip()
+    logger.debug(f"mgstage 获取到简介: {plot[:100] if plot else '空'}...")
     preview_pics = container.xpath("//a[@class='sample_image']/@href")
+    logger.debug(f"mgstage 获取到预览图: {len(preview_pics)} 张")
 
     if Cfg().crawler.hardworking:
         # 预览视频是点击按钮后再加载的，不在静态网页中
