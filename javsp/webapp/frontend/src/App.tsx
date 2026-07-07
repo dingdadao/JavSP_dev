@@ -7,6 +7,7 @@ import {
   FolderOutlined,
   UnorderedListOutlined,
   FileTextOutlined,
+  ToolOutlined,
 } from '@ant-design/icons'
 import Dashboard from './pages/Dashboard'
 import Scrape from './pages/Scrape'
@@ -14,6 +15,8 @@ import Tasks from './pages/Tasks'
 import Config from './pages/Config'
 import Watcher from './pages/Watcher'
 import Logs from './pages/Logs'
+import MovieDetail from './pages/MovieDetail'
+import Checker from './pages/Checker'
 import { SocketProvider } from './hooks/useSocket'
 
 const { Header, Sider, Content } = Layout
@@ -28,6 +31,7 @@ function AppLayout() {
     { key: '/config', icon: <SettingOutlined />, label: <Link to="/config">配置管理</Link> },
     { key: '/watcher', icon: <FolderOutlined />, label: <Link to="/watcher">文件监控</Link> },
     { key: '/logs', icon: <FileTextOutlined />, label: <Link to="/logs">操作日志</Link> },
+    { key: '/checker', icon: <ToolOutlined />, label: <Link to="/checker">命名检查</Link> },
   ]
 
   return (
@@ -47,7 +51,7 @@ function AppLayout() {
           borderBottom: '1px solid rgba(99,102,241,0.15)',
         }}>
           <Typography.Title level={4} style={{ margin: 0, color: '#6366f1' }}>
-            JavSP Web
+            dingdadaoSp Web
           </Typography.Title>
         </div>
         <Menu
@@ -79,6 +83,8 @@ function AppLayout() {
             <Route path="/config" element={<Config />} />
             <Route path="/watcher" element={<Watcher />} />
             <Route path="/logs" element={<Logs />} />
+            <Route path="/movie" element={<MovieDetail />} />
+            <Route path="/checker" element={<Checker />} />
           </Routes>
         </Content>
       </Layout>

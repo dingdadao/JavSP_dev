@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   Card, Button, Space, Typography, Table, Tag, Switch,
-  Input, Modal, message, Empty, Tooltip, List
+  Input, Modal, App, Empty, Tooltip, List
 } from 'antd'
 import {
   FolderOutlined, PlusOutlined, DeleteOutlined,
@@ -18,6 +18,7 @@ export default function Watcher() {
   const [addModalVisible, setAddModalVisible] = useState(false)
   const [newPath, setNewPath] = useState('')
   const [events, setEvents] = useState<any[]>([])
+  const { message } = App.useApp()
 
   useEffect(() => { loadData() }, [])
 
@@ -128,7 +129,7 @@ export default function Watcher() {
 
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
         <Card
-          bordered={false}
+          variant="borderless"
           title={
             <Space>
               监控路径列表
@@ -157,7 +158,7 @@ export default function Watcher() {
           />
         </Card>
 
-        <Card title="实时监控事件" bordered={false}>
+        <Card title="实时监控事件" variant="borderless">
           {events.length > 0 ? (
             <List
               size="small"

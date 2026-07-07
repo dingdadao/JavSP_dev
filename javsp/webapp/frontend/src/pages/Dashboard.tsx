@@ -9,7 +9,7 @@ import {
   VideoCameraOutlined,
 } from '@ant-design/icons'
 import { useSocket } from '../hooks/useSocket'
-import { fetchSystemInfo, fetchTasks, fetchLogs } from '../api'
+import { fetchSystemInfo, fetchTasks, fetchLogs, fetchScrapeStatus } from '../api'
 import dayjs from 'dayjs'
 
 export default function Dashboard() {
@@ -17,14 +17,31 @@ export default function Dashboard() {
   const [sysInfo, setSysInfo] = useState<any>(null)
   const [recentTasks, setRecentTasks] = useState<any[]>([])
   const [recentLogs, setRecentLogs] = useState<any[]>([])
+  const [currentStatus, setCurrentStatus] = useState<any>(null)
 
   useEffect(() => {
     loadData()
+    // 主动轮询当前任务状态，避免 Socket 事件丢失导致首页不刷新
+    const timer = setInterval(() => {
+      loadCurrentStatus()
+    }, 2000)
+    return () => clearInterval(timer)
   }, [])
 
   useEffect(() => {
     if (lastProgress) loadData()
   }, [lastProgress])
+
+  const loadCurrentStatus = async () => {
+    try {
+      const res = await fetchScrapeStatus()
+      if (res.code === 0 && res.data) {
+        setCurrentStatus(res.data)
+      }
+    } catch (e) {
+      // 无任务时接口可能返回非 0，忽略即可
+    }
+  }
 
   const loadData = async () => {
     try {
@@ -41,7 +58,13 @@ export default function Dashboard() {
     }
   }
 
-  const isRunning = lastProgress?.status === 'running'
+  // 优先显示进行中的状态：Socket 或轮询任一处于 running 都优先展示
+  const progress = lastProgress?.status === 'running'
+    ? lastProgress
+    : currentStatus?.status === 'running'
+      ? currentStatus
+      : lastProgress || currentStatus
+  const isRunning = progress?.status === 'running'
 
   return (
     <div>
@@ -103,35 +126,35 @@ export default function Dashboard() {
               />
             }
           >
-            {isRunning && lastProgress ? (
+            {isRunning && progress ? (
               <div>
                 <Space direction="vertical" style={{ width: '100%' }} size="middle">
                   <div>
                     <Typography.Text type="secondary">
-                      {lastProgress.message}
+                      {progress.message}
                     </Typography.Text>
-                    {lastProgress.current && (
+                    {progress.current && (
                       <Tag color="processing" style={{ marginLeft: 8 }}>
-                        <VideoCameraOutlined /> {lastProgress.current}
+                        <VideoCameraOutlined /> {progress.current}
                       </Tag>
                     )}
                   </div>
                   <Progress
-                    percent={lastProgress.total ? Math.round((lastProgress.completed! / lastProgress.total) * 100) : 0}
+                    percent={progress.total ? Math.round((progress.completed! / progress.total) * 100) : 0}
                     status="active"
                     strokeColor={{ from: '#6366f1', to: '#22c55e' }}
-                    format={() => `${lastProgress.completed || 0} / ${lastProgress.total || 0}`}
+                    format={() => `${progress.completed || 0} / ${progress.total || 0}`}
                   />
                   <Space>
-                    <Tag color="success">成功: {lastProgress.success || 0}</Tag>
-                    <Tag color="error">失败: {lastProgress.failed || 0}</Tag>
+                    <Tag color="success">成功: {progress.success || 0}</Tag>
+                    <Tag color="error">失败: {progress.failed || 0}</Tag>
                   </Space>
                 </Space>
               </div>
-            ) : lastProgress && lastProgress.status !== 'running' ? (
+            ) : progress && progress.status !== 'running' ? (
               <div>
                 <Typography.Text type="success" style={{ fontSize: 16 }}>
-                  {lastProgress.message}
+                  {progress.message}
                 </Typography.Text>
               </div>
             ) : (

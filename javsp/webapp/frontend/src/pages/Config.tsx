@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   Card, Form, Input, Button, Switch, Select, InputNumber,
-  Typography, Tabs, Space, message, Spin, Collapse, Tag, Tooltip, Alert
+  Typography, Tabs, Space, Spin, Collapse, Tag, Tooltip, Alert, App
 } from 'antd'
 import { SaveOutlined, SettingOutlined } from '@ant-design/icons'
 import { fetchConfig, updateConfig } from '../api'
@@ -61,7 +61,7 @@ function ScannerConfig({ saving, onSave }: { saving: boolean; onSave: (v: any) =
   }, [])
 
   return (
-    <Card title="扫描设置" bordered={false} extra={
+    <Card title="扫描设置" variant="borderless" extra={
       <Button icon={<SaveOutlined />} type="primary" loading={saving} onClick={() => form.submit()}>保存</Button>
     }>
       <Spin spinning={loading}>
@@ -101,7 +101,7 @@ function NetworkConfig({ saving, onSave }: { saving: boolean; onSave: (v: any) =
   }, [])
 
   return (
-    <Card title="网络设置" bordered={false} extra={
+    <Card title="网络设置" variant="borderless" extra={
       <Button icon={<SaveOutlined />} type="primary" loading={saving} onClick={() => form.submit()}>保存</Button>
     }>
       <Spin spinning={loading}>
@@ -141,7 +141,7 @@ function CrawlerConfig({ saving, onSave }: { saving: boolean; onSave: (v: any) =
   }, [])
 
   return (
-    <Card title="爬虫设置" bordered={false} extra={
+    <Card title="爬虫设置" variant="borderless" extra={
       <Button icon={<SaveOutlined />} type="primary" loading={saving} onClick={() => form.submit()}>保存</Button>
     }>
       <Spin spinning={loading}>
@@ -163,6 +163,14 @@ function CrawlerConfig({ saving, onSave }: { saving: boolean; onSave: (v: any) =
     </Card>
   )
 }
+
+const CHECKER_NFO_TITLE_PRESETS = [
+  { value: '', label: '使用全局NFO标题格式' },
+  { value: '{title}', label: 'Jellyfin 标准格式' },
+  { value: '{num} {title}', label: 'Kodi 格式 (番号+标题)' },
+  { value: '{num} - {title}', label: '飞牛 NAS 格式 (番号-标题)' },
+  { value: '{actress} - {num} {title}', label: '标准格式 (女优-番号 标题)' },
+]
 
 const NAMING_VARIABLES = [
   { var: '{num}', desc: '影片番号', example: 'SSIS-001', note: '优先 DVD ID，cid 模式下为 cid' },
@@ -221,12 +229,14 @@ function SummarizerConfig({ saving, onSave }: { saving: boolean; onSave: (v: any
         move_files: s.move_files ?? true,
         basename_pattern: s.basename_pattern || '{title}',
         nfo_title_pattern: s.nfo_title_pattern || '{title}',
+        checker_nfo_title_pattern: s.checker_nfo_title_pattern || '',
+        checker_default_path: s.checker_default_path || '',
       })
     }).finally(() => setLoading(false))
   }, [])
 
   return (
-    <Card title="整理设置" bordered={false} extra={
+    <Card title="整理设置" variant="borderless" extra={
       <Button icon={<SaveOutlined />} type="primary" loading={saving} onClick={() => form.submit()}>保存</Button>
     }>
       <Spin spinning={loading}>
@@ -242,6 +252,12 @@ function SummarizerConfig({ saving, onSave }: { saving: boolean; onSave: (v: any
           </Form.Item>
           <Form.Item label="NFO标题格式" name="nfo_title_pattern">
             <Input placeholder="{title}" />
+          </Form.Item>
+          <Form.Item label="检查器NFO标题格式" name="checker_nfo_title_pattern" extra="命名检查器重新刮削时使用的NFO标题格式，留空则使用上方的NFO标题格式">
+            <Select options={CHECKER_NFO_TITLE_PRESETS} />
+          </Form.Item>
+          <Form.Item label="文件检查器默认扫描路径" name="checker_default_path" extra="命名检查页面的默认扫描路径，可设置为外挂硬盘路径">
+            <Input placeholder="/Volumes/data/movies" />
           </Form.Item>
           <VariableHint />
         </Form>
@@ -285,7 +301,7 @@ function TranslatorConfig({ saving, onSave }: { saving: boolean; onSave: (v: any
   const isLLM = isLLMEngine(engine)
 
   return (
-    <Card title="翻译设置" bordered={false} extra={
+    <Card title="翻译设置" variant="borderless" extra={
       <Button icon={<SaveOutlined />} type="primary" loading={saving} onClick={() => form.submit()}>保存</Button>
     }>
       <Spin spinning={loading}>
@@ -407,7 +423,7 @@ function CoverConfig({ saving, onSave }: { saving: boolean; onSave: (v: any) => 
   }, [])
 
   return (
-    <Card title="封面设置" bordered={false} extra={
+    <Card title="封面设置" variant="borderless" extra={
       <Button icon={<SaveOutlined />} type="primary" loading={saving} onClick={() => form.submit()}>保存</Button>
     }>
       <Spin spinning={loading}>
@@ -439,7 +455,7 @@ function WatcherConfig({ saving, onSave }: { saving: boolean; onSave: (v: any) =
   }, [])
 
   return (
-    <Card title="文件监控设置" bordered={false} extra={
+    <Card title="文件监控设置" variant="borderless" extra={
       <Button icon={<SaveOutlined />} type="primary" loading={saving} onClick={() => form.submit()}>保存</Button>
     }>
       <Spin spinning={loading}>
@@ -458,6 +474,7 @@ function WatcherConfig({ saving, onSave }: { saving: boolean; onSave: (v: any) =
 
 export default function Config() {
   const [saving, setSaving] = useState(false)
+  const { message } = App.useApp()
 
   const handleSave = async (group: string, values: any) => {
     setSaving(true)

@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react'
-import { Card, Table, Tag, Button, Space, Typography, Modal, Descriptions, message } from 'antd'
-import { ReloadOutlined, EyeOutlined } from '@ant-design/icons'
-import { fetchTasks, fetchTask } from '../api'
+import {
+  Card, Table, Tag, Button, Space, Typography, Modal, Descriptions,
+  App, Progress, Image
+} from 'antd'
+import {
+  ReloadOutlined, EyeOutlined, PauseCircleOutlined
+} from '@ant-design/icons'
+import { Link } from 'react-router-dom'
+import { fetchTasks, fetchTask, stopScrapeTask } from '../api'
+import { useSocket } from '../hooks/useSocket'
 import dayjs from 'dayjs'
 
 export default function Tasks() {
@@ -9,8 +16,26 @@ export default function Tasks() {
   const [loading, setLoading] = useState(false)
   const [detail, setDetail] = useState<any>(null)
   const [detailVisible, setDetailVisible] = useState(false)
+  const [stoppingTaskIds, setStoppingTaskIds] = useState<Set<string>>(new Set())
+  const { message } = App.useApp()
+  const { lastProgress, connected } = useSocket()
 
   useEffect(() => { loadTasks() }, [])
+
+  // 当 Socket 收到刮削进度时，立即刷新列表和详情
+  useEffect(() => {
+    if (lastProgress?.task_id) {
+      // 本地先更新该任务状态，避免停止按钮继续显示
+      setTasks((prev: any[]) => prev.map(t => t.id === lastProgress.task_id ? { ...t, ...lastProgress } : t))
+      // 如果详情 Modal 打开的是当前任务，也同步更新
+      setDetail((prev: any) => prev && prev.id === lastProgress.task_id ? { ...prev, ...lastProgress } : prev)
+      // 再向后端拉取一次完整数据（包含 items 等）
+      loadTasks()
+      if (detailVisible && detail?.id === lastProgress.task_id) {
+        refreshDetail(lastProgress.task_id)
+      }
+    }
+  }, [lastProgress])
 
   const loadTasks = async () => {
     setLoading(true)
@@ -24,6 +49,15 @@ export default function Tasks() {
     }
   }
 
+  const refreshDetail = async (taskId: string) => {
+    try {
+      const { data } = await fetchTask(taskId)
+      setDetail(data)
+    } catch (e) {
+      // 静默失败，不影响主流程
+    }
+  }
+
   const showDetail = async (taskId: string) => {
     try {
       const { data } = await fetchTask(taskId)
@@ -32,6 +66,41 @@ export default function Tasks() {
     } catch (e) {
       message.error('加载任务详情失败')
     }
+  }
+
+  const handleStop = async (taskId: string) => {
+    setStoppingTaskIds(prev => new Set(prev).add(taskId))
+    try {
+      const res = await stopScrapeTask()
+      if (res.code === 0) {
+        message.success(res.message)
+      } else {
+        message.error(res.message)
+      }
+    } catch (e: any) {
+      message.error(e.response?.data?.message || '停止任务失败')
+    } finally {
+      // 3 秒后清除本地 stopping 标记（或收到进度时清除）
+      setTimeout(() => {
+        setStoppingTaskIds(prev => {
+          const next = new Set(prev)
+          next.delete(taskId)
+          return next
+        })
+      }, 5000)
+    }
+  }
+
+  const runningTask = tasks.find(t => t.status === 'running')
+
+  const statusMap: Record<string, { color: string; text: string }> = {
+    completed: { color: 'success', text: '完成' },
+    running: { color: 'processing', text: '运行中' },
+    partial: { color: 'warning', text: '部分完成' },
+    failed: { color: 'error', text: '失败' },
+    pending: { color: 'default', text: '等待中' },
+    error: { color: 'error', text: '异常' },
+    stopped: { color: 'warning', text: '已停止' },
   }
 
   const columns = [
@@ -50,15 +119,7 @@ export default function Tasks() {
       dataIndex: 'status',
       width: 100,
       render: (status: string) => {
-        const map: Record<string, { color: string; text: string }> = {
-          completed: { color: 'success', text: '完成' },
-          running: { color: 'processing', text: '运行中' },
-          partial: { color: 'warning', text: '部分完成' },
-          failed: { color: 'error', text: '失败' },
-          pending: { color: 'default', text: '等待中' },
-          error: { color: 'error', text: '异常' },
-        }
-        const s = map[status] || { color: 'default', text: status }
+        const s = statusMap[status] || { color: 'default', text: status }
         return <Tag color={s.color}>{s.text}</Tag>
       },
     },
@@ -76,8 +137,17 @@ export default function Tasks() {
     {
       title: '进度',
       key: 'progress',
-      width: 120,
-      render: (_: any, r: any) => `${r.completed}/${r.total}`,
+      width: 160,
+      render: (_: any, r: any) => (
+        r.total ? (
+          <Progress
+            percent={Math.round(((r.completed || 0) / r.total) * 100)}
+            size="small"
+            status={r.status === 'running' ? 'active' : 'normal'}
+            format={() => `${r.completed}/${r.total}`}
+          />
+        ) : `${r.completed || 0}/${r.total || 0}`
+      ),
     },
     {
       title: '成功/失败',
@@ -98,21 +168,55 @@ export default function Tasks() {
     },
     {
       title: '操作',
-      width: 80,
+      width: 160,
       render: (_: any, record: any) => (
-        <Button type="link" icon={<EyeOutlined />} onClick={() => showDetail(record.id)}>
-          详情
-        </Button>
+        <Space>
+          <Button type="link" icon={<EyeOutlined />} onClick={() => showDetail(record.id)}>
+            详情
+          </Button>
+          {(record.status === 'running' || stoppingTaskIds.has(record.id)) && (
+            <Button
+              type="link"
+              danger
+              icon={<PauseCircleOutlined />}
+              loading={stoppingTaskIds.has(record.id)}
+              disabled={stoppingTaskIds.has(record.id)}
+              onClick={() => handleStop(record.id)}
+            >
+              {stoppingTaskIds.has(record.id) ? '停止中' : '停止'}
+            </Button>
+          )}
+        </Space>
       ),
     },
   ]
 
   return (
     <div>
-      <Typography.Title level={4} style={{ marginBottom: 24 }}>任务列表</Typography.Title>
+      <Typography.Title level={4} style={{ marginBottom: 24 }}>
+        任务列表
+        <Tag color={connected ? 'success' : 'error'} style={{ marginLeft: 12 }}>
+          {connected ? '实时连接正常' : '实时连接断开'}
+        </Tag>
+      </Typography.Title>
       <Card
-        bordered={false}
-        extra={<Button icon={<ReloadOutlined />} onClick={loadTasks}>刷新</Button>}
+        variant="borderless"
+        extra={
+          <Space>
+            {runningTask && (
+              <Button
+                danger
+                icon={<PauseCircleOutlined />}
+                loading={stoppingTaskIds.has(runningTask.id)}
+                disabled={stoppingTaskIds.has(runningTask.id)}
+                onClick={() => handleStop(runningTask.id)}
+              >
+                {stoppingTaskIds.has(runningTask.id) ? '停止中' : '停止当前任务'}
+              </Button>
+            )}
+            <Button icon={<ReloadOutlined />} onClick={loadTasks}>刷新</Button>
+          </Space>
+        }
       >
         <Table
           dataSource={tasks}
@@ -129,7 +233,7 @@ export default function Tasks() {
         open={detailVisible}
         onCancel={() => setDetailVisible(false)}
         footer={null}
-        width={800}
+        width={900}
       >
         {detail && (
           <div>
@@ -140,13 +244,24 @@ export default function Tasks() {
               <Descriptions.Item label="状态">
                 <Tag color={
                   detail.status === 'completed' ? 'success' :
-                  detail.status === 'running' ? 'processing' : 'error'
-                }>{detail.status}</Tag>
+                  detail.status === 'running' ? 'processing' :
+                  detail.status === 'stopped' ? 'warning' : 'error'
+                }>
+                  {statusMap[detail.status]?.text || detail.status}
+                </Tag>
               </Descriptions.Item>
               <Descriptions.Item label="类型">{detail.task_type === 'manual' ? '手动' : '自动'}</Descriptions.Item>
-              <Descriptions.Item label="源路径">{detail.source_path}</Descriptions.Item>
-              <Descriptions.Item label="输出路径">{detail.dest_path}</Descriptions.Item>
-              <Descriptions.Item label="进度">{detail.completed}/{detail.total}</Descriptions.Item>
+              <Descriptions.Item label="源路径" span={2}>{detail.source_path}</Descriptions.Item>
+              <Descriptions.Item label="输出路径" span={2}>{detail.dest_path}</Descriptions.Item>
+              <Descriptions.Item label="进度" span={2}>
+                {detail.total ? (
+                  <Progress
+                    percent={Math.round(((detail.completed || 0) / detail.total) * 100)}
+                    status={detail.status === 'running' ? 'active' : 'normal'}
+                    format={() => `${detail.completed}/${detail.total}`}
+                  />
+                ) : `${detail.completed}/${detail.total}`}
+              </Descriptions.Item>
               <Descriptions.Item label="创建时间">{dayjs(detail.created_at).format('YYYY-MM-DD HH:mm:ss')}</Descriptions.Item>
             </Descriptions>
 
@@ -158,8 +273,37 @@ export default function Tasks() {
                   rowKey="id"
                   size="small"
                   pagination={false}
+                  scroll={{ y: 400 }}
                   columns={[
-                    { title: '番号', dataIndex: 'dvdid', width: 140 },
+                    {
+                      title: '封面',
+                      dataIndex: 'cover',
+                      width: 90,
+                      render: (cover: string) => cover ? (
+                        <Image
+                          src={`/api/cover?path=${encodeURIComponent(cover)}`}
+                          alt="封面"
+                          style={{ width: 70, height: 100, objectFit: 'cover', borderRadius: 4 }}
+                          preview={{ src: `/api/cover?path=${encodeURIComponent(cover)}` }}
+                          fallback="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+                        />
+                      ) : (
+                        <div style={{ width: 70, height: 100, background: '#2a2a3c', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>
+                          无封面
+                        </div>
+                      ),
+                    },
+                    {
+                      title: '番号', dataIndex: 'dvdid', width: 140,
+                      render: (id: string, record: any) => (
+                        record.dest_path ? (
+                          <Link to={`/movie?dvdid=${encodeURIComponent(id)}&path=${encodeURIComponent(record.dest_path)}`}>
+                            {id}
+                          </Link>
+                        ) : id
+                      ),
+                    },
+                    { title: '标题', dataIndex: 'title', ellipsis: true },
                     {
                       title: '状态', dataIndex: 'status', width: 80,
                       render: (s: string) => (
@@ -168,7 +312,14 @@ export default function Tasks() {
                         </Tag>
                       ),
                     },
-                    { title: '消息', dataIndex: 'message', ellipsis: true },
+                    { title: '结果', dataIndex: 'message', ellipsis: true },
+                    { title: '原因', dataIndex: 'reason', ellipsis: true },
+                    {
+                      title: '输出路径',
+                      dataIndex: 'dest_path',
+                      ellipsis: true,
+                      render: (p: string) => p || '-',
+                    },
                   ]}
                 />
               </>

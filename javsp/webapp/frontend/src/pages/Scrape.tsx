@@ -1,25 +1,44 @@
 import { useEffect, useState } from 'react'
 import {
   Card, Input, Button, Space, Switch, Typography, Form,
-  Alert, Progress, Tag, Steps, Result, Divider, Row, Col, message
+  Alert, Progress, Tag, Steps, Result, Divider, Row, Col, App
 } from 'antd'
 import {
   PlayCircleOutlined, ScanOutlined, CheckCircleOutlined,
-  LoadingOutlined, FolderOutlined, RocketOutlined
+  LoadingOutlined, FolderOutlined, RocketOutlined,
+  PauseCircleOutlined
 } from '@ant-design/icons'
 import { useSocket } from '../hooks/useSocket'
-import { createScrapeTask, fetchConfig } from '../api'
+import { createScrapeTask, fetchConfig, fetchScrapeStatus, stopScrapeTask } from '../api'
 
 export default function Scrape() {
-  const { lastProgress } = useSocket()
+  const { lastProgress, connected } = useSocket()
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
   const [taskId, setTaskId] = useState<string | null>(null)
+  const [stopping, setStopping] = useState(false)
   const [config, setConfig] = useState<any>({})
+  const { message } = App.useApp()
+
+  // 系统永远只有一个任务，任何进度都直接显示
+  const currentProgress = lastProgress?.status ? lastProgress : null
 
   useEffect(() => {
     loadConfig()
+    // 页面加载时检查是否有进行中的任务（刷新页面后 taskId 会丢失）
+    checkRunningTask()
   }, [])
+
+  const checkRunningTask = async () => {
+    try {
+      const res = await fetchScrapeStatus()
+      if (res.code === 0 && res.data?.status === 'running') {
+        setTaskId(res.data.task_id)
+      }
+    } catch (e) {
+      // 忽略
+    }
+  }
 
   const loadConfig = async () => {
     try {
@@ -55,8 +74,31 @@ export default function Scrape() {
     }
   }
 
-  const isRunning = lastProgress?.status === 'running'
-  const isDone = taskId && lastProgress && ['completed', 'partial', 'failed', 'error'].includes(lastProgress.status)
+  const handleStop = async () => {
+    setStopping(true)
+    try {
+      const res = await stopScrapeTask()
+      if (res.code === 0) {
+        message.success(res.message)
+      } else {
+        message.error(res.message)
+        setStopping(false)
+      }
+    } catch (e: any) {
+      message.error(e.response?.data?.message || '停止任务失败')
+      setStopping(false)
+    }
+  }
+
+  const isRunning = currentProgress?.status === 'running'
+  const isDone = taskId && currentProgress && ['completed', 'partial', 'failed', 'error', 'stopped'].includes(currentProgress.status)
+
+  // 任务结束（无论完成、失败还是停止）后，重置 stopping 状态
+  useEffect(() => {
+    if (isDone) {
+      setStopping(false)
+    }
+  }, [isDone])
 
   const currentStep = isRunning ? 1 : isDone ? 2 : 0
 
@@ -64,11 +106,14 @@ export default function Scrape() {
     <div>
       <Typography.Title level={4} style={{ marginBottom: 24 }}>
         <RocketOutlined /> 开始刮削
+        <Tag color={connected ? 'success' : 'error'} style={{ marginLeft: 12 }}>
+          {connected ? '实时连接正常' : '实时连接断开'}
+        </Tag>
       </Typography.Title>
 
       <Row gutter={24}>
         <Col xs={24} lg={10}>
-          <Card title="刮削设置" bordered={false}>
+          <Card title="刮削设置" variant="borderless">
             <Form
               form={form}
               layout="vertical"
@@ -114,64 +159,80 @@ export default function Scrape() {
                   {isRunning ? '任务进行中...' : '开始刮削'}
                 </Button>
               </Form.Item>
+
+              {(isRunning || stopping) && (
+                <Form.Item>
+                  <Button
+                    danger
+                    icon={<PauseCircleOutlined />}
+                    onClick={handleStop}
+                    loading={stopping}
+                    disabled={stopping}
+                    size="large"
+                    block
+                  >
+                    {stopping ? '正在停止...' : '停止任务'}
+                  </Button>
+                </Form.Item>
+              )}
             </Form>
           </Card>
         </Col>
 
         <Col xs={24} lg={14}>
-          <Card title="刮削进度" bordered={false}>
+          <Card title="刮削进度" variant="borderless">
             <Steps
               current={currentStep}
               items={[
                 { title: '准备', icon: <ScanOutlined /> },
-                { title: '刮削中', icon: isRunning ? <LoadingOutlined /> : <PlayCircleOutlined /> },
-                { title: '完成', icon: <CheckCircleOutlined /> },
+                { title: isRunning ? '刮削中' : '刮削', icon: isRunning ? <LoadingOutlined /> : <PlayCircleOutlined /> },
+                { title: currentProgress?.status === 'stopped' ? '已停止' : currentProgress?.status === 'failed' ? '失败' : '完成', icon: <CheckCircleOutlined /> },
               ]}
               style={{ marginBottom: 32 }}
             />
 
-            {isRunning && lastProgress && (
+            {isRunning && currentProgress && (
               <Space direction="vertical" style={{ width: '100%' }} size="large">
                 <Alert
                   type="info"
                   showIcon
-                  message={lastProgress.message}
-                  description={lastProgress.current ? `当前: ${lastProgress.current}` : undefined}
+                  message={currentProgress.message}
+                  description={currentProgress.current ? `当前: ${currentProgress.current}` : undefined}
                 />
                 <Progress
-                  percent={lastProgress.total ? Math.round(((lastProgress.completed || 0) / lastProgress.total) * 100) : 0}
+                  percent={currentProgress.total ? Math.round(((currentProgress.completed || 0) / currentProgress.total) * 100) : 0}
                   status="active"
                   strokeColor={{ from: '#6366f1', to: '#22c55e' }}
                   size="default"
                 />
                 <Row gutter={16}>
                   <Col span={8}>
-                    <Card size="small" bordered={false}>
+                    <Card size="small" variant="borderless">
                       <Typography.Text type="secondary">总计</Typography.Text>
-                      <div style={{ fontSize: 24, fontWeight: 'bold' }}>{lastProgress.total || 0}</div>
+                      <div style={{ fontSize: 24, fontWeight: 'bold' }}>{currentProgress.total || 0}</div>
                     </Card>
                   </Col>
                   <Col span={8}>
-                    <Card size="small" bordered={false}>
+                    <Card size="small" variant="borderless">
                       <Typography.Text type="secondary">成功</Typography.Text>
-                      <div style={{ fontSize: 24, fontWeight: 'bold', color: '#22c55e' }}>{lastProgress.success || 0}</div>
+                      <div style={{ fontSize: 24, fontWeight: 'bold', color: '#22c55e' }}>{currentProgress.success || 0}</div>
                     </Card>
                   </Col>
                   <Col span={8}>
-                    <Card size="small" bordered={false}>
+                    <Card size="small" variant="borderless">
                       <Typography.Text type="secondary">失败</Typography.Text>
-                      <div style={{ fontSize: 24, fontWeight: 'bold', color: '#ef4444' }}>{lastProgress.failed || 0}</div>
+                      <div style={{ fontSize: 24, fontWeight: 'bold', color: '#ef4444' }}>{currentProgress.failed || 0}</div>
                     </Card>
                   </Col>
                 </Row>
               </Space>
             )}
 
-            {isDone && (
+            {isDone && currentProgress && (
               <Result
-                status={lastProgress.status === 'completed' ? 'success' : lastProgress.status === 'failed' ? 'error' : 'warning'}
-                title={lastProgress.message}
-                subTitle={`成功 ${(lastProgress as any).success || 0} / ${lastProgress.total || 0}`}
+                status={currentProgress.status === 'completed' ? 'success' : currentProgress.status === 'failed' ? 'error' : 'warning'}
+                title={currentProgress.message}
+                subTitle={`成功 ${currentProgress.success || 0} / ${currentProgress.total || 0}`}
               />
             )}
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Card, Table, Tag, Select, Space, Typography, Button, message } from 'antd'
+import { Card, Table, Tag, Select, Space, Typography, Button, App } from 'antd'
 import { ReloadOutlined, FileTextOutlined } from '@ant-design/icons'
 import { fetchLogs } from '../api'
 import dayjs from 'dayjs'
@@ -15,6 +15,7 @@ export default function Logs() {
   const [logs, setLogs] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [level, setLevel] = useState<string | undefined>(undefined)
+  const { message } = App.useApp()
 
   useEffect(() => { loadLogs() }, [level])
 
@@ -69,7 +70,7 @@ export default function Logs() {
         <FileTextOutlined /> 操作日志
       </Typography.Title>
 
-      <Card bordered={false} extra={
+      <Card variant="borderless" extra={
         <Space>
           <Select
             allowClear

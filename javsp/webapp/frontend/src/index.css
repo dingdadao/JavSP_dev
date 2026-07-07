@@ -9,6 +9,11 @@ body {
   min-height: 100vh;
 }
 
+.checker-row-completed {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 .ant-menu-item-selected {
   background: rgba(99, 102, 241, 0.15) !important;
 }
