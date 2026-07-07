@@ -139,4 +139,14 @@ test
 .pytest_cache/
 ./config.yml
 .skipped
+
+# JavSP Web
+javsp_web.db
+javsp_web.db-journal
+javsp_web.db-wal
+javsp_web.db-shm
+.javsp_web.pid
+javsp_web.log
+javsp/webapp/frontend/node_modules/
+javsp/webapp/frontend/dist/
  
