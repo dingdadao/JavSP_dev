@@ -100,8 +100,6 @@ def apply_web_config():
         _override(cfg.summarizer.nfo, 'title_pattern', summarizer_cfg['nfo_title_pattern'])
     if 'nfo_basename' in summarizer_cfg and summarizer_cfg['nfo_basename']:
         _override(cfg.summarizer.nfo, 'basename_pattern', summarizer_cfg['nfo_basename'])
-    if 'fnos_compatible' in summarizer_cfg:
-        _override(cfg.summarizer.nfo, 'fnos_compatible', bool(summarizer_cfg['fnos_compatible']))
     if 'move_files' in summarizer_cfg:
         _override(cfg.summarizer, 'move_files', bool(summarizer_cfg['move_files']))
     if 'hard_link' in summarizer_cfg:

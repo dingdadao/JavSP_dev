@@ -155,7 +155,6 @@ def seed_default_config():
         ('summarizer', 'basename_pattern', '{title}', 'str', '文件命名规则（封面、NFO等）', '{title}'),
         ('summarizer', 'file_basename_pattern', '', 'str', '影片文件单独命名规则（留空则使用上方规则）', ''),
         ('summarizer', 'nfo_title_pattern', '{title}', 'str', 'NFO 中的标题格式', '{title}'),
-        ('summarizer', 'fnos_compatible', 'false', 'bool', '飞牛 NAS 兼容模式', 'false'),
         ('summarizer', 'hard_link', 'false', 'bool', '使用硬链接方式整理文件（节省空间）', 'false'),
         ('summarizer', 'length_maximum', '250', 'int', '允许的最长文件路径', '250'),
         ('summarizer', 'max_actress_count', '10', 'int', '路径中 {actress} 最多包含多少名女优', '10'),
