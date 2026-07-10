@@ -35,6 +35,11 @@ def is_stop_requested() -> bool:
     return _stop_event.is_set()
 
 
+def _override(obj, attr, value):
+    """绕过 pydantic frozen 限制设置属性"""
+    object.__setattr__(obj, attr, value)
+
+
 def apply_web_config():
     """从数据库读取 Web 配置，覆盖 Cfg() 中对应的值"""
     from javsp.config import Cfg, CrawlerID
@@ -44,21 +49,25 @@ def apply_web_config():
     # 爬虫列表
     crawler_cfg = db_config.get('crawler', {})
     if 'selection_normal' in crawler_cfg:
-        cfg.crawler.selection.normal = [CrawlerID(c) for c in crawler_cfg['selection_normal']]
+        _override(cfg.crawler.selection, 'normal', [CrawlerID(c) for c in crawler_cfg['selection_normal']])
     if 'selection_fc2' in crawler_cfg:
-        cfg.crawler.selection.fc2 = [CrawlerID(c) for c in crawler_cfg['selection_fc2']]
+        _override(cfg.crawler.selection, 'fc2', [CrawlerID(c) for c in crawler_cfg['selection_fc2']])
 
     # 爬虫镜像地址
     network_cfg = db_config.get('network', {})
     if 'crawler_mirror' in network_cfg and isinstance(network_cfg['crawler_mirror'], dict):
-        cfg.network.crawler_mirror = {CrawlerID(k): v for k, v in network_cfg['crawler_mirror'].items()}
+        _override(cfg.network, 'crawler_mirror', {CrawlerID(k): v for k, v in network_cfg['crawler_mirror'].items()})
 
     # 翻译设置
     translator_cfg = db_config.get('translator', {})
     if 'engine' in translator_cfg:
         engine_name = translator_cfg['engine']
         if not engine_name:
-            cfg.translator.engine = None
+            _override(cfg.translator, 'engine', None)
+    if 'translate_title' in translator_cfg:
+        _override(cfg.translator.fields, 'title', bool(translator_cfg['translate_title']))
+    if 'translate_plot' in translator_cfg:
+        _override(cfg.translator.fields, 'plot', bool(translator_cfg['translate_plot']))
 
     logger.debug(f"Web 配置已应用: 爬虫列表={[c.value for c in cfg.crawler.selection.normal]}")
 
