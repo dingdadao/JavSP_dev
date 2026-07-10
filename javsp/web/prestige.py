@@ -5,11 +5,12 @@ import logging
 
 from javsp.web.base import *
 from javsp.web.exceptions import *
+from javsp.config import Cfg, CrawlerID
 from javsp.datatype import MovieInfo
 
 
 logger = logging.getLogger(__name__)
-base_url = 'https://www.prestige-av.com'
+base_url = Cfg().network.crawler_mirror.get(CrawlerID.prestige, '').rstrip('/') or 'https://www.prestige-av.com'
 # prestige要求访问者携带已通过R18认证的cookies才能够获得完整数据，否则会被重定向到认证页面
 # （其他多数网站的R18认证只是在网页上遮了一层，完整数据已经传回，不影响爬虫爬取）
 cookies = {'__age_auth__': 'true'}

@@ -17,6 +17,23 @@ from javsp.webapp.database import (
 
 logger = logging.getLogger('javsp.webapp.scraper')
 
+# 全局停止信号
+_stop_event = threading.Event()
+
+
+def request_stop():
+    """请求停止当前刮削任务"""
+    _stop_event.set()
+
+
+def clear_stop():
+    """清除停止信号（新任务开始前调用）"""
+    _stop_event.clear()
+
+
+def is_stop_requested() -> bool:
+    return _stop_event.is_set()
+
 
 def run_scrape_task(task_id: str, source: str, dest: str,
                     translate: bool, move_files: bool, socketio):
@@ -37,6 +54,8 @@ def run_scrape_task(task_id: str, source: str, dest: str,
             logger.debug(f"SocketIO 推送失败: {e}")
 
     try:
+        clear_stop()
+
         # 扫描影片文件
         emit_progress({'task_id': task_id, 'status': 'scanning', 'message': '正在扫描影片文件...'})
         movies = scan_movies(source)
@@ -64,6 +83,19 @@ def run_scrape_task(task_id: str, source: str, dest: str,
         failed_count = 0
 
         for idx, movie in enumerate(movies):
+            # 检查是否收到停止信号
+            if is_stop_requested():
+                logger.info(f"任务 {task_id[:8]}: 收到停止请求，中断刮削")
+                update_task(task_id, status='stopped', finished_at=time.strftime('%Y-%m-%d %H:%M:%S'))
+                emit_progress({
+                    'task_id': task_id, 'status': 'stopped',
+                    'total': total, 'completed': idx,
+                    'success': success_count, 'failed': failed_count,
+                    'message': f'任务已停止: 已完成 {idx}/{total}'
+                })
+                add_log('INFO', 'scraper', f'任务 {task_id[:8]}: 用户停止，已完成 {idx}/{total}')
+                return
+
             dvdid = movie.dvdid or movie.cid or f'unknown_{idx}'
             item_id = add_task_item(task_id, dvdid, movie.files[0] if movie.files else '')
 

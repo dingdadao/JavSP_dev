@@ -18,7 +18,7 @@ from javsp.webapp.database import (
     get_media_libraries, get_default_media_library,
     add_media_library, update_media_library, delete_media_library
 )
-from javsp.webapp.scraper import run_scrape_task
+from javsp.webapp.scraper import run_scrape_task, request_stop, is_stop_requested
 
 logger = logging.getLogger('javsp.webapp.routes')
 
@@ -152,6 +152,19 @@ def register_routes(app, socketio: SocketIO):
             latest = tasks[0]
             task_detail = get_task(latest['id'])
             return jsonify({'code': 0, 'data': task_detail})
+        except Exception as e:
+            return jsonify({'code': 500, 'message': str(e)}), 500
+
+    @app.route('/api/scrape/stop', methods=['POST'])
+    def api_stop_scrape():
+        """停止当前刮削任务"""
+        try:
+            with _current_task_lock:
+                if not _current_task_thread or not _current_task_thread.is_alive():
+                    return jsonify({'code': 404, 'message': '当前无运行中的任务'}), 404
+            request_stop()
+            add_log('INFO', 'scraper', '请求停止刮削任务')
+            return jsonify({'code': 0, 'message': '已发送停止信号'})
         except Exception as e:
             return jsonify({'code': 500, 'message': str(e)}), 500
 

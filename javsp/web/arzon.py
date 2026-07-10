@@ -6,6 +6,7 @@ import re
 
 from javsp.web.base import request_get
 from javsp.web.exceptions import *
+from javsp.config import Cfg, CrawlerID
 from javsp.datatype import MovieInfo
 import requests
 from lxml import html
@@ -15,7 +16,7 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = logging.getLogger(__name__)
-base_url = "https://www.arzon.jp"
+base_url = Cfg().network.crawler_mirror.get(CrawlerID.arzon, '').rstrip('/') or 'https://www.arzon.jp'
 
 
 def get_cookie():

@@ -50,7 +50,19 @@ class Network(BaseConfig):
     retry: NonNegativeInt = 3
     timeout: Duration
     proxy_free: Dict[CrawlerID, Url]
+    # 爬虫镜像地址，配置后优先使用镜像地址
+    crawler_mirror: Dict[CrawlerID, str] = {}
     ssl_verification: bool = True
+
+    def get_crawler_url(self, crawler_id: CrawlerID, permanent_url: str) -> str:
+        """获取爬虫的实际访问地址，优先使用镜像地址"""
+        mirror = self.crawler_mirror.get(crawler_id)
+        if mirror and mirror.strip():
+            return mirror.rstrip('/')
+        if self.proxy_server:
+            return permanent_url
+        free_url = self.proxy_free.get(crawler_id)
+        return str(free_url) if free_url else permanent_url
     # 连接池配置
     pool_connections: int = 20
     pool_maxsize: int = 20

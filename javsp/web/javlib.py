@@ -21,6 +21,16 @@ base_url = ''
 def init_network_cfg():
     """设置合适的代理模式和base_url"""
     request.timeout = 5
+    # 优先使用镜像地址
+    mirror = Cfg().network.crawler_mirror.get(CrawlerID.javlib, '')
+    if mirror and mirror.strip():
+        try:
+            resp = request.get(mirror, delay_raise=True)
+            if resp.status_code == 200:
+                request.timeout = Cfg().network.timeout.seconds
+                return mirror.rstrip('/')
+        except Exception as e:
+            logger.debug(f"镜像地址访问失败 '{mirror}': {e}")
     proxy_free_url = get_proxy_free_url('javlib')
     urls = [str(Cfg().network.proxy_free[CrawlerID.javlib]), permanent_url]
     if proxy_free_url and proxy_free_url not in urls:

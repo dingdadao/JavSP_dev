@@ -134,6 +134,7 @@ def seed_default_config():
         ('network', 'retry', '3', 'int', '抓取失败重试次数', '3'),
         ('network', 'timeout', 'PT10S', 'str', '网络请求超时 (ISO 8601 Duration)', 'PT10S'),
         ('network', 'ssl_verification', 'true', 'bool', '是否验证 SSL 证书', 'true'),
+        ('network', 'crawler_mirror', '{}', 'json', '爬虫镜像地址 (JSON对象，配置后优先使用)', '{}'),
 
         # crawler 配置
         ('crawler', 'selection_normal', json.dumps(['javdb', 'arzon', 'airav', 'mgstage', 'prestige', 'javbus']),

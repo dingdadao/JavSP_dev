@@ -43,11 +43,7 @@ os.makedirs(DATA_DIR, exist_ok=True)
 
 # genre_map = GenreMap(os.path.join(DATA_DIR, 'genre_javdb.csv'))
 permanent_url = 'https://javdb.com'
-base_url = (
-    permanent_url
-    if Cfg().network.proxy_server
-    else str(Cfg().network.proxy_free[CrawlerID.javdb])
-)
+base_url = Cfg().network.get_crawler_url(CrawlerID.javdb, permanent_url)
 
 
 def retry_request(url, max_retries=3, delay=3):

@@ -5,12 +5,12 @@ import logging
 
 from javsp.web.base import Request, resp2html
 from javsp.web.exceptions import *
-from javsp.config import Cfg
+from javsp.config import Cfg, CrawlerID
 from javsp.datatype import MovieInfo
 
 
 logger = logging.getLogger(__name__)
-base_url = 'https://www.mgstage.com'
+base_url = Cfg().network.crawler_mirror.get(CrawlerID.mgstage, '').rstrip('/') or 'https://www.mgstage.com'
 # 初始化Request实例（要求携带已通过R18认证的cookies，否则会被重定向到认证页面）
 request = Request(use_scraper=True)
 request.cookies = {'adc': '1'}

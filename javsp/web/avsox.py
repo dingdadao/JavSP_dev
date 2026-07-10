@@ -8,7 +8,7 @@ from javsp.datatype import MovieInfo
 
 
 logger = logging.getLogger(__name__)
-base_url = str(Cfg().network.proxy_free[CrawlerID.avsox])
+base_url = Cfg().network.get_crawler_url(CrawlerID.avsox, 'https://avsox.click')
 
 
 def parse_data(movie: MovieInfo):

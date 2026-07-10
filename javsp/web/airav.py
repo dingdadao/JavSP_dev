@@ -6,7 +6,7 @@ from html import unescape
 
 from javsp.web.base import Request
 from javsp.web.exceptions import *
-from javsp.config import Cfg
+from javsp.config import Cfg, CrawlerID
 from javsp.datatype import MovieInfo
 
 # 初始化Request实例
@@ -17,7 +17,7 @@ request.timeout = 20
 
 
 logger = logging.getLogger(__name__)
-base_url = 'https://www.airav.wiki'
+base_url = Cfg().network.crawler_mirror.get(CrawlerID.airav, '').rstrip('/') or 'https://www.airav.wiki'
 
 
 def search_movie(dvdid):
