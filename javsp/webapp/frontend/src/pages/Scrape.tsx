@@ -45,10 +45,11 @@ export default function Scrape() {
       const { data } = await fetchConfig()
       const scanner = data?.scanner || {}
       const summarizer = data?.summarizer || {}
+      const translator = data?.translator || {}
       form.setFieldsValue({
         source: scanner.input_directory || '',
         dest: summarizer.output_folder_pattern || '',
-        translate: true,
+        translate: translator.translate_title ?? true,
         move_files: summarizer.move_files ?? true,
       })
 
@@ -72,8 +73,11 @@ export default function Scrape() {
       await updateConfig([
         { group: 'scanner', key: 'input_directory', value: values.source || '' },
         { group: 'summarizer', key: 'output_folder_pattern', value: values.dest || '' },
+        { group: 'translator', key: 'translate_title', value: values.translate ?? true },
+        { group: 'translator', key: 'translate_plot', value: values.translate ?? true },
+        { group: 'summarizer', key: 'move_files', value: values.move_files ?? true },
       ])
-      message.success('路径已保存')
+      message.success('配置已保存')
     } catch (e: any) {
       message.error(e.response?.data?.message || '保存失败')
     } finally {
