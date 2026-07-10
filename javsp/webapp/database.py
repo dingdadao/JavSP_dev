@@ -232,8 +232,10 @@ def update_config(group: str, key: str, value):
         elif isinstance(value, int):
             value = str(value)
         conn.execute("""
-            UPDATE config SET value = ? WHERE group_name = ? AND key_name = ?
-        """, (value, group, key))
+            INSERT INTO config (group_name, key_name, value, value_type, description, default_value)
+            VALUES (?, ?, ?, 'str', '', '')
+            ON CONFLICT(group_name, key_name) DO UPDATE SET value = excluded.value
+        """, (group, key, value))
 
 
 def batch_update_config(updates: list[dict]):
@@ -250,8 +252,10 @@ def batch_update_config(updates: list[dict]):
             elif isinstance(value, int):
                 value = str(value)
             conn.execute("""
-                UPDATE config SET value = ? WHERE group_name = ? AND key_name = ?
-            """, (value, item['group'], item['key']))
+                INSERT INTO config (group_name, key_name, value, value_type, description, default_value)
+                VALUES (?, ?, ?, 'str', '', '')
+                ON CONFLICT(group_name, key_name) DO UPDATE SET value = excluded.value
+            """, (item['group'], item['key'], value))
 
 
 # 任务相关操作
