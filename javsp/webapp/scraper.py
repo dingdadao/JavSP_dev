@@ -55,10 +55,10 @@ def apply_web_config():
     if 'hardworking' in crawler_cfg:
         _override(cfg.crawler, 'hardworking', bool(crawler_cfg['hardworking']))
     if 'sleep_after_scraping' in crawler_cfg:
-        from pendulum import Duration
+        import pendulum
         val = crawler_cfg['sleep_after_scraping']
         if isinstance(val, str):
-            _override(cfg.crawler, 'sleep_after_scraping', Duration.from_iso8601(val) if val else cfg.crawler.sleep_after_scraping)
+            _override(cfg.crawler, 'sleep_after_scraping', pendulum.parse(val) if val else cfg.crawler.sleep_after_scraping)
         else:
             _override(cfg.crawler, 'sleep_after_scraping', val)
     if 'required_keys' in crawler_cfg:
@@ -79,10 +79,10 @@ def apply_web_config():
     if 'retry' in network_cfg:
         _override(cfg.network, 'retry', network_cfg['retry'])
     if 'timeout' in network_cfg:
-        from pendulum import Duration
+        import pendulum
         val = network_cfg['timeout']
         if isinstance(val, str):
-            _override(cfg.network, 'timeout', Duration.from_iso8601(val) if val else cfg.network.timeout)
+            _override(cfg.network, 'timeout', pendulum.parse(val) if val else cfg.network.timeout)
         else:
             _override(cfg.network, 'timeout', val)
     if 'ssl_verification' in network_cfg:
