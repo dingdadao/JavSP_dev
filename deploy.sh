@@ -241,11 +241,10 @@ do_start() {
         fi
     fi
 
-    # 检查前端是否已构建，未构建则自动安装
-    if [[ ! -f "$DIST_DIR/index.html" ]]; then
-        warn "前端未构建，开始自动安装..."
-        do_install
-    fi
+    # 每次启动前重新构建前端（确保代码更新生效）
+    info "构建前端..."
+    install_node_deps
+    build_frontend
 
     cd "$SCRIPT_DIR"
     info "启动 Web 服务 ($HOST:$PORT)..."
