@@ -14,7 +14,9 @@ from javsp.webapp.database import (
     get_config, update_config, batch_update_config,
     create_task, update_task, add_task_item, update_task_item,
     get_task, get_tasks, add_log, get_logs,
-    add_watch_path, remove_watch_path, get_watch_paths, toggle_watch_path
+    add_watch_path, remove_watch_path, get_watch_paths, toggle_watch_path,
+    get_media_libraries, get_default_media_library,
+    add_media_library, update_media_library, delete_media_library
 )
 from javsp.webapp.scraper import run_scrape_task
 
@@ -207,6 +209,62 @@ def register_routes(app, socketio: SocketIO):
                 return jsonify({'code': 400, 'message': '路径不能为空'}), 400
             toggle_watch_path(path, enabled)
             return jsonify({'code': 0, 'message': '已更新'})
+        except Exception as e:
+            return jsonify({'code': 500, 'message': str(e)}), 500
+
+    # ==================== 媒体库管理 ====================
+    @app.route('/api/media-libraries', methods=['GET'])
+    def api_get_media_libraries():
+        try:
+            libs = get_media_libraries()
+            return jsonify({'code': 0, 'data': libs})
+        except Exception as e:
+            return jsonify({'code': 500, 'message': str(e)}), 500
+
+    @app.route('/api/media-libraries', methods=['POST'])
+    def api_create_media_library():
+        try:
+            data = request.get_json()
+            name = data.get('name', '').strip()
+            path = data.get('path', '').strip()
+            is_default = data.get('is_default', False)
+            if not name:
+                return jsonify({'code': 400, 'message': '名称不能为空'}), 400
+            if not path:
+                return jsonify({'code': 400, 'message': '路径不能为空'}), 400
+            if not os.path.isdir(path):
+                return jsonify({'code': 404, 'message': f'目录不存在: {path}'}), 404
+            lib_id = add_media_library(name, path, is_default)
+            add_log('INFO', 'media_library', f'添加媒体库: {name} ({path})')
+            return jsonify({'code': 0, 'message': '媒体库已添加', 'data': {'id': lib_id}})
+        except Exception as e:
+            if 'UNIQUE' in str(e):
+                return jsonify({'code': 409, 'message': '该路径已存在于媒体库中'}), 409
+            return jsonify({'code': 500, 'message': str(e)}), 500
+
+    @app.route('/api/media-libraries/<int:lib_id>', methods=['PUT'])
+    def api_update_media_library(lib_id):
+        try:
+            data = request.get_json()
+            name = data.get('name')
+            path = data.get('path')
+            is_default = data.get('is_default')
+            if path and not os.path.isdir(path):
+                return jsonify({'code': 404, 'message': f'目录不存在: {path}'}), 404
+            update_media_library(lib_id, name=name, path=path, is_default=is_default)
+            add_log('INFO', 'media_library', f'更新媒体库 #{lib_id}')
+            return jsonify({'code': 0, 'message': '媒体库已更新'})
+        except Exception as e:
+            if 'UNIQUE' in str(e):
+                return jsonify({'code': 409, 'message': '该路径已存在于媒体库中'}), 409
+            return jsonify({'code': 500, 'message': str(e)}), 500
+
+    @app.route('/api/media-libraries/<int:lib_id>', methods=['DELETE'])
+    def api_delete_media_library(lib_id):
+        try:
+            delete_media_library(lib_id)
+            add_log('INFO', 'media_library', f'删除媒体库 #{lib_id}')
+            return jsonify({'code': 0, 'message': '媒体库已删除'})
         except Exception as e:
             return jsonify({'code': 500, 'message': str(e)}), 500
 

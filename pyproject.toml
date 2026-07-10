@@ -39,7 +39,6 @@ watchdog = "^6.0.0"
 
 [tool.poetry.scripts]
 javsp = "javsp.__main__:entry"
-server = "javsp.server:entry"
 web = "javsp.webapp.server:main"
 
 [tool.poetry.group.dev.dependencies]

@@ -1,138 +1,168 @@
+# Jav Manager
 
+**AV 元数据刮削器 & Web 管理界面**
 
-# Jav Scraper Package - Forked Version of JavSP
-
-**汇总多站点数据的 AV 元数据刮削器**
-
-JavSP 是一个强大的工具，用于提取影片文件名中的番号信息，自动抓取并汇总多个站点数据的 AV 元数据。它会根据指定的规则分类整理影片文件，并为 Emby、Jellyfin、Kodi 等软件生成对应的元数据文件。
+自动识别影片番号、抓取并汇总多个站点的 AV 元数据，根据指定规则分类整理影片文件，并为 Emby、Jellyfin、Kodi 等媒体管理软件生成 NFO 元数据文件。内置 Web 管理界面，通过浏览器即可完成配置、刮削、监控等全部操作。
 
 ## 功能特点
 
-JavSP 提供了以下功能，有些已实现，有些正在开发中，欢迎提出新的功能需求：
+- 自动识别影片番号，支持分片影片处理
+- 多线程并行抓取多个站点数据，汇总生成 NFO 文件
+- 下载高清封面，支持 AI 人体分析裁剪非常规封面
+- 翻译标题和剧情简介（支持 Google / Bing / Baidu / OpenAI 兼容接口 / 本地 AI）
+- **Web 管理界面**：可视化配置、实时刮削进度、任务管理、文件监控
+- **文件变动监控**：监控目录变动，自动触发刮削
 
-* [x] 自动识别影片番号
-* [x] 支持处理影片分片
-* [x] 汇总多个站点的数据并生成 NFO 数据文件
-* [x] 每天自动对站点抓取器进行测试
-* [x] 支持多线程并行抓取
-* [x] 下载高清封面
-* [x] 基于 AI 人体分析裁剪非常规封面
-* [x] 自动检查和更新新版本
-* [x] 翻译标题和剧情简介
-* [ ] 匹配本地字幕
-* [ ] 使用小缩略图创建文件夹封面
-* [ ] 保持不同站点之间的 genre 分类统一
-* [ ] 不同的运行模式（抓取数据+整理，仅抓取数据）
-* [ ] 可选：所有站点抓取失败时由人工介入
+## 快速开始
 
-## 安装并运行
-
-### 从源代码运行
-
-请确保您已经安装了 Poetry 构建系统：
+### 一键部署（推荐）
 
 ```bash
-pipx install poetry
-poetry self add poetry-dynamic-versioning
+git clone https://github.com/dingdadao/jav-manager.git
+cd jav-manager
+
+# 安装所有依赖并构建前端
+./deploy.sh install
+
+# 启动服务
+./deploy.sh start
 ```
 
-然后，克隆此项目：
+启动后访问 `http://localhost:5001` 即可使用 Web 管理界面。
 
-```bash
-git clone https://github.com/dingdadao/JavSP_dev.git
-cd JavSP
-```
-
-使用 Poetry 构建并运行：
+### 命令行模式
 
 ```bash
 poetry install
 poetry run javsp
 ```
 
-## 使用
+## 部署脚本
 
-JavSP 开箱即用。如果您希望自定义配置，可以修改 `config.yml` 文件，按需调整配置项。
-
-此外，JavSP 也支持从命令行指定运行参数（命令行参数优先于配置文件）。使用以下命令查看支持的参数列表：
+`deploy.sh` 自动检测并安装缺失的系统依赖（Python、Poetry、Node.js），兼容 macOS 和 Linux。
 
 ```bash
-JavSP -h
+./deploy.sh install    # 安装所有依赖并构建前端
+./deploy.sh start      # 启动服务（首次自动执行安装）
+./deploy.sh stop       # 停止服务
+./deploy.sh restart    # 重启服务
+./deploy.sh status     # 查看运行状态和依赖信息
+./deploy.sh logs       # 实时查看日志
 ```
 
-### 命名规则
+自定义端口或监听地址：
 
-在 `config.yml` 配置文件中的 `NamingRule` 下：
+```bash
+JAVSP_HOST=127.0.0.1 JAVSP_PORT=8080 ./deploy.sh start
+```
 
-* **`save_dir`**：存放影片、封面和 NFO 数据文件等的文件夹路径。
-* **`filename`**：影片、封面和 NFO 数据文件等的文件名。
+## Web 管理界面
 
-这两个字段支持使用变量，举例如下：
+| 页面 | 功能 |
+|------|------|
+| 仪表盘 | 系统统计、实时刮削进度、最近任务、操作日志 |
+| 开始刮削 | 配置源/目标路径，一键启动刮削任务，实时进度条 |
+| 任务列表 | 查看所有历史任务，每部影片的刮削结果详情 |
+| 配置管理 | 可视化编辑全部配置项（扫描/网络/爬虫/整理/翻译/封面/监控） |
+| 文件监控 | 管理监控路径，检测到新文件自动触发刮削 |
+| 操作日志 | 按级别筛选查看系统日志 |
+
+## 命名规则
+
+配置文件中 `summarizer.path` 下的 `output_folder_pattern`、`basename_pattern` 支持使用变量：
+
+| 变量 | 含义 | 备注 |
+|------|------|------|
+| `{num}` | 影片番号 | 优先 DVD ID，cid 模式下为 cid |
+| `{title}` | 影片标题（翻译后） | |
+| `{rawtitle}` | 原始标题（翻译前） | 无论是否启用翻译，始终为原始标题 |
+| `{actress}` | 女优 | 多个用逗号分隔 |
+| `{censor}` | 有码/无码 | 有码 / 无码 / 不确定 |
+| `{score}` | 影片评分 | 10 分制，例如 7.81 |
+| `{serial}` | 系列 | |
+| `{label}` | 番号系列 | 番号拆分后的系列前缀 |
+| `{director}` | 导演 | |
+| `{producer}` | 制作商 | |
+| `{publisher}` | 发行商 | |
+| `{date}` | 发行日期 | 例如 2020-05-20 |
+| `{year}` | 发行年份 | |
+
+示例：
 
 ```yaml
-[NamingRule]
-save_dir = $actress/[$num] $title
-filename = $num
+output_folder_pattern: "/path/to/output/{censor}/{actress}/{num}"
+basename_pattern: "{title}"
 ```
 
-### 支持的变量
+> 使用 NFO 时，不建议在文件名中添加 `{title}`，可能影响媒体管理软件兼容性。Linux 文件系统对长路径支持有限。
 
-| 变量           | 含义    | 默认值                  | 备注                             |
-| ------------ | ----- | -------------------- | ------------------------------ |
-| `$num`       | 影片番号  |                      | 优先使用 DVD ID，当工作在 cid 模式下则为 cid |
-| `$title`     | 影片标题  | `null_for_title`     |                                |
-| `$rawtitle`  | 原始标题  | `$title`             | 无论是否启用翻译功能，始终为翻译前的原始标题         |
-| `$actress`   | 女优    | `null_for_actress`   | 多个女优用逗号分隔                      |
-| `$censor`    | 有码/无码 |                      | 有三种状态：已知有码/已知无码/不确定            |
-| `$score`     | 影片评分  | 0                    | 10分制，例如：7.81                   |
-| `$serial`    | 系列    | `null_for_serial`    |                                |
-| `$label`     | 番号系列  | ---                  | 将番号拆分后得到的系列                    |
-| `$director`  | 导演    | `null_for_director`  |                                |
-| `$producer`  | 制作商   | `null_for_producer`  |                                |
-| `$publisher` | 发行商   | `null_for_publisher` |                                |
-| `$date`      | 发行日期  | `0000-00-00`         | 例如：2020-05-20                  |
-| `$year`      | 发行年份  | `0000`               |                                |
+## 远程部署
 
-### 示例配置
-
-如果你希望将有码和无码影片整理到不同文件夹：
-
-```yaml
-save_dir = $censor/$actress/[$num]
+```bash
+ssh user@your-server
+git clone https://github.com/dingdadao/jav-manager.git
+cd jav-manager
+./deploy.sh start
 ```
 
-### 注意事项
+### Nginx 反向代理
 
-* 如果在使用 `nfo` 文件时，不建议在命名规则中添加 `$title`（标题），因为它可能会影响媒体管理软件的兼容性，尤其是 Linux 文件系统对长路径的支持有限。
-* 对于仅在 Windows 上使用时，添加标题字段 `$title` 可能更加方便。
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
 
----
+    location / {
+        proxy_pass http://127.0.0.1:5001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+    }
+}
+```
 
-### 项目许可
+## 技术栈
+
+**后端**：Python / Flask / Flask-SocketIO / SQLite / watchdog
+
+**前端**：React / TypeScript / Ant Design / Vite / Socket.IO
+
+## 项目结构
+
+```
+jav-manager/
+├── javsp/
+│   ├── __main__.py          # 命令行入口
+│   ├── config.py            # 配置管理
+│   ├── datatype.py          # 数据类型定义
+│   ├── web/                 # 各站点爬虫
+│   ├── core/                # 核心功能
+│   ├── utils/               # 工具函数
+│   └── webapp/              # Web 管理界面
+│       ├── app.py           # Flask 应用
+│       ├── database.py      # SQLite 数据库
+│       ├── routes.py        # API 路由
+│       ├── scraper.py       # 刮削执行器
+│       ├── watcher.py       # 文件监控
+│       ├── server.py        # 启动入口
+│       └── frontend/        # React 前端
+│           └── src/
+│               ├── pages/   # 页面组件
+│               ├── hooks/   # 自定义 Hook
+│               └── api/     # API 调用
+├── deploy.sh                # 一键部署脚本
+├── config.yml               # 配置文件
+└── pyproject.toml           # 项目配置
+```
+
+## 项目许可
 
 本项目遵循 [GPL-3.0 License](https://opensource.org/licenses/GPL-3.0) 和 [Anti 996 License](https://github.com/996icu/996.ICU/blob/master/LICENSE_CN) 共同许可。
 
-### 使用条款
+## 使用条款
 
-* 本软件仅供学习 Python 和技术交流使用。
-* 请勿在微博、微信等墙内社交平台上宣传此项目。
-* 使用本软件时，请遵守当地法律法规。
-* 禁止将本软件用于商业用途。
-
----
-
-### Star 贡献
-
-
-
----
-
-**优化迭代：**
-
-1. **简化命名规则描述：** 我对命名规则和变量支持部分进行了简化，去掉了一些多余的内容，使其更加易读。
-2. **清晰的安装和使用流程：** 将安装和运行的步骤更加清晰地描述，帮助用户顺利启动项目。
-3. **添加许可和使用条款：** 明确项目的许可协议及使用条款，增加法律合规性。
-
----
-
-
+- 本软件仅供学习 Python 和技术交流使用
+- 请勿在微博、微信等墙内社交平台上宣传此项目
+- 使用本软件时，请遵守当地法律法规
+- 禁止将本软件用于商业用途

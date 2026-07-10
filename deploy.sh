@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 # ============================================================
-# JavSP Web 一键部署脚本 - 兼容 macOS / Linux
+# Jav Manager 部署脚本 - 兼容 macOS / Linux
+#
 # 用法:
-#   chmod +x deploy.sh && ./deploy.sh [start|stop|restart|status|logs|rebuild]
+#   ./deploy.sh install    安装所有依赖并构建前端
+#   ./deploy.sh start      启动服务（首次自动安装）
+#   ./deploy.sh stop       停止服务
+#   ./deploy.sh restart    重启服务
+#   ./deploy.sh status     查看运行状态
+#   ./deploy.sh logs       实时查看日志
 # ============================================================
 
 set -euo pipefail
@@ -25,16 +31,6 @@ DB_FILE="$SCRIPT_DIR/javsp_web.db"
 HOST="${JAVSP_HOST:-0.0.0.0}"
 PORT="${JAVSP_PORT:-5001}"
 
-# Poetry 安装后可能不在默认 PATH 中，提前探测
-POETRY_BIN=""
-for p in "$HOME/.local/bin/poetry" "$HOME/.poetry/bin/poetry" "/usr/local/bin/poetry"; do
-    if [[ -x "$p" ]]; then
-        POETRY_BIN="$(dirname "$p")"
-        export PATH="$POETRY_BIN:$PATH"
-        break
-    fi
-done
-
 # ---------- 工具函数 ----------
 info()  { echo -e "${GREEN}[INFO]${NC}  $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
@@ -50,10 +46,9 @@ detect_os() {
 
 OS=$(detect_os)
 
-# ---------- 环境检查与自动安装 ----------
+# ---------- 依赖检查与安装 ----------
 
 ensure_basics() {
-    # 检查最基本的工具：curl, git, sudo
     local missing=()
     if ! command -v curl &>/dev/null; then missing+=(curl); fi
     if ! command -v git &>/dev/null; then missing+=(git); fi
@@ -68,7 +63,6 @@ ensure_basics() {
                 sudo dnf install -y "${missing[@]}"
             fi
         elif [[ "$OS" == "macos" ]]; then
-            # macOS 通常自带 curl/git，如果缺少走 xcode-select
             xcode-select --install 2>/dev/null || true
         fi
     fi
@@ -114,7 +108,7 @@ ensure_python() {
 }
 
 ensure_poetry() {
-    # 每次都尝试刷新 PATH（处理刚安装的情况）
+    # 刷新 PATH
     for p in "$HOME/.local/bin" "$HOME/.poetry/bin"; do
         if [[ -d "$p" ]]; then
             export PATH="$p:$PATH"
@@ -163,7 +157,6 @@ ensure_node() {
         fi
     elif [[ "$OS" == "linux" ]]; then
         if command -v apt-get &>/dev/null; then
-            # 使用 NodeSource 安装最新 LTS
             curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
             sudo apt-get install -y nodejs
         elif command -v yum &>/dev/null; then
@@ -185,64 +178,24 @@ ensure_node() {
     info "Node.js $(node -v) ✓"
 }
 
-ensure_python_deps() {
+install_python_deps() {
     cd "$SCRIPT_DIR"
-    # 检查虚拟环境是否存在且包含关键包
-    local need_install=false
-    if ! poetry run python -c "import flask" &>/dev/null; then
-        need_install=true
-    fi
-    if ! poetry run python -c "import flask_socketio" &>/dev/null; then
-        need_install=true
-    fi
-    if ! poetry run python -c "import watchdog" &>/dev/null; then
-        need_install=true
-    fi
-
-    if [[ "$need_install" == "true" ]]; then
-        info "安装 Python 依赖..."
-        poetry install --no-interaction 2>&1 | tail -5
-    fi
-    info "Python 依赖就绪 ✓"
+    info "安装 Python 依赖..."
+    poetry install --no-interaction 2>&1 | tail -5
+    info "Python 依赖安装完成 ✓"
 }
 
-ensure_node_deps() {
+install_node_deps() {
     cd "$FRONTEND_DIR"
-    if [[ ! -d "node_modules" ]] || [[ ! -f "node_modules/.package-lock.json" ]]; then
-        info "安装前端依赖..."
-        npm install 2>&1 | tail -5
-    fi
-    info "前端依赖就绪 ✓"
+    info "安装前端依赖..."
+    npm install 2>&1 | tail -5
+    info "前端依赖安装完成 ✓"
 }
 
-ensure_frontend_build() {
-    if [[ ! -f "$DIST_DIR/index.html" ]]; then
-        info "前端未构建，开始构建..."
-        do_build
-    else
-        info "前端已构建 ✓"
-    fi
-}
-
-# 一键检查并安装所有缺失依赖
-ensure_all_deps() {
-    echo -e "${CYAN}========== 检查依赖 ==========${NC}"
-    ensure_basics
-    ensure_python
-    ensure_poetry
-    ensure_node
-    ensure_python_deps
-    ensure_node_deps
-    ensure_frontend_build
-    echo -e "${CYAN}==============================${NC}"
-}
-
-# ---------- 构建前端 ----------
-do_build() {
-    info "正在构建前端..."
+build_frontend() {
+    info "构建前端..."
     cd "$FRONTEND_DIR"
     npm run build 2>&1 | grep -E "(built|error|✓)" || true
-
     if [[ -f "$DIST_DIR/index.html" ]]; then
         info "前端构建成功 ✓"
     else
@@ -251,9 +204,29 @@ do_build() {
     fi
 }
 
-# ---------- 启动服务 ----------
+# ---------- install 命令 ----------
+do_install() {
+    echo -e "${CYAN}========== 安装 JavSP Web ==========${NC}"
+    ensure_basics
+    ensure_python
+    ensure_poetry
+    ensure_node
+    install_python_deps
+    install_node_deps
+    build_frontend
+    echo ""
+    info "=========================================="
+    info "  安装完成!"
+    info "=========================================="
+    info "  启动服务:  ./deploy.sh start"
+    info "  停止服务:  ./deploy.sh stop"
+    info "  查看状态:  ./deploy.sh status"
+    info "=========================================="
+}
+
+# ---------- start 命令 ----------
 do_start() {
-    info "========== 启动 JavSP Web =========="
+    info "========== 启动 Jav Manager =========="
 
     # 检查是否已运行
     if [[ -f "$PID_FILE" ]]; then
@@ -268,8 +241,11 @@ do_start() {
         fi
     fi
 
-    # 一键检查并安装所有依赖
-    ensure_all_deps
+    # 检查前端是否已构建，未构建则自动安装
+    if [[ ! -f "$DIST_DIR/index.html" ]]; then
+        warn "前端未构建，开始自动安装..."
+        do_install
+    fi
 
     cd "$SCRIPT_DIR"
     info "启动 Web 服务 ($HOST:$PORT)..."
@@ -283,14 +259,12 @@ do_start() {
     while [[ $wait_count -lt 10 ]]; do
         sleep 1
         wait_count=$((wait_count + 1))
-        # 检查是否已经有输出或端口在监听
         if ! kill -0 "$pid" 2>/dev/null; then
             error "服务启动失败，查看日志: $LOG_FILE"
             tail -20 "$LOG_FILE" 2>/dev/null
             rm -f "$PID_FILE"
             exit 1
         fi
-        # 检查端口是否已开始监听
         if curl -sf "http://localhost:$PORT/api/health" >/dev/null 2>&1; then
             break
         fi
@@ -299,7 +273,7 @@ do_start() {
     if kill -0 "$pid" 2>/dev/null; then
         echo ""
         info "=========================================="
-        info "  JavSP Web 启动成功!"
+        info "  Jav Manager 启动成功!"
         info "=========================================="
         info "  PID:       $pid"
         info "  地址:      http://$HOST:$PORT"
@@ -318,7 +292,7 @@ do_start() {
     fi
 }
 
-# ---------- 停止服务 ----------
+# ---------- stop 命令 ----------
 do_stop() {
     info "========== 停止 JavSP Web =========="
 
@@ -363,24 +337,14 @@ do_stop() {
     rm -f "$PID_FILE"
 }
 
-# ---------- 重启服务 ----------
+# ---------- restart 命令 ----------
 do_restart() {
     do_stop
     sleep 1
     do_start
 }
 
-# ---------- 重新构建并重启 ----------
-do_rebuild() {
-    info "========== 重新构建并重启 =========="
-    do_stop
-    # 强制重新构建前端
-    rm -rf "$DIST_DIR"
-    ensure_all_deps
-    do_start
-}
-
-# ---------- 查看状态 ----------
+# ---------- status 命令 ----------
 do_status() {
     echo -e "${CYAN}========== JavSP Web 状态 ==========${NC}"
 
@@ -438,7 +402,7 @@ do_status() {
     echo -e "${CYAN}====================================${NC}"
 }
 
-# ---------- 查看日志 ----------
+# ---------- logs 命令 ----------
 do_logs() {
     if [[ -f "$LOG_FILE" ]]; then
         info "实时日志 (Ctrl+C 退出):"
@@ -450,16 +414,16 @@ do_logs() {
 
 # ---------- 帮助信息 ----------
 show_help() {
-    echo -e "${CYAN}JavSP Web 一键部署脚本${NC}  (macOS / Linux)"
+    echo -e "${CYAN}JavSP Web 部署脚本${NC}  (macOS / Linux)"
     echo ""
     echo "用法: $0 <command>"
     echo ""
     echo "命令:"
-    echo "  start     一键启动 (自动检查/安装依赖 → 构建前端 → 启动服务)"
+    echo "  install   安装所有依赖并构建前端"
+    echo "  start     启动服务（首次自动安装）"
     echo "  stop      停止服务"
     echo "  restart   重启服务"
-    echo "  rebuild   重新构建前端并重启"
-    echo "  status    查看运行状态和依赖信息"
+    echo "  status    查看运行状态"
     echo "  logs      实时查看日志"
     echo ""
     echo "环境变量:"
@@ -468,6 +432,10 @@ show_help() {
     echo ""
     echo "快速开始:"
     echo "  chmod +x deploy.sh"
+    echo "  ./deploy.sh install    # 安装依赖"
+    echo "  ./deploy.sh start      # 启动服务"
+    echo ""
+    echo "  # 或者直接 start（自动安装）:"
     echo "  ./deploy.sh start"
     echo ""
     echo "  # 自定义端口:"
@@ -476,10 +444,10 @@ show_help() {
 
 # ---------- 主入口 ----------
 case "${1:-help}" in
+    install)  do_install ;;
     start)    do_start ;;
     stop)     do_stop ;;
     restart)  do_restart ;;
-    rebuild)  do_rebuild ;;
     status)   do_status ;;
     logs)     do_logs ;;
     help|*)   show_help ;;

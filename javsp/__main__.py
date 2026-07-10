@@ -87,9 +87,10 @@ def graceful_shutdown(signum=None, frame=None):
     sys.exit(0)
 
 
-# 注册信号处理器
-signal.signal(signal.SIGINT, graceful_shutdown)   # Ctrl+C
-signal.signal(signal.SIGTERM, graceful_shutdown)  # kill 命令
+# 注册信号处理器（仅在主线程中注册，避免从子线程导入时抛出异常）
+if threading.current_thread() is threading.main_thread():
+    signal.signal(signal.SIGINT, graceful_shutdown)   # Ctrl+C
+    signal.signal(signal.SIGTERM, graceful_shutdown)  # kill 命令
 
 
 # 将StreamHandler的stream修改为TqdmOut，以与Tqdm协同工作

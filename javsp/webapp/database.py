@@ -95,6 +95,15 @@ def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
+            -- 媒体库表
+            CREATE TABLE IF NOT EXISTS media_library (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                path TEXT NOT NULL UNIQUE,
+                is_default INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
             CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
             CREATE INDEX IF NOT EXISTS idx_task_items_task_id ON task_items(task_id);
             CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs(created_at);
@@ -354,3 +363,63 @@ def toggle_watch_path(path: str, enabled: bool):
     """启用/禁用监控路径"""
     with get_db() as conn:
         conn.execute("UPDATE watch_paths SET enabled = ? WHERE path = ?", (1 if enabled else 0, path))
+
+
+# 媒体库相关
+def get_media_libraries() -> list:
+    """获取所有媒体库"""
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM media_library ORDER BY created_at DESC").fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_default_media_library() -> dict:
+    """获取默认媒体库"""
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM media_library WHERE is_default = 1 LIMIT 1").fetchone()
+        if row:
+            return dict(row)
+        # 没有默认的，返回第一个
+        row = conn.execute("SELECT * FROM media_library ORDER BY created_at DESC LIMIT 1").fetchone()
+        return dict(row) if row else None
+
+
+def add_media_library(name: str, path: str, is_default: bool = False) -> int:
+    """添加媒体库"""
+    with get_db() as conn:
+        # 如果设为默认，先取消其他默认
+        if is_default:
+            conn.execute("UPDATE media_library SET is_default = 0")
+        # 如果是第一个库，自动设为默认
+        count = conn.execute("SELECT COUNT(*) FROM media_library").fetchone()[0]
+        if count == 0:
+            is_default = True
+        cursor = conn.execute(
+            "INSERT INTO media_library (name, path, is_default) VALUES (?, ?, ?)",
+            (name, path, 1 if is_default else 0)
+        )
+        return cursor.lastrowid
+
+
+def update_media_library(lib_id: int, name: str = None, path: str = None, is_default: bool = None):
+    """更新媒体库"""
+    with get_db() as conn:
+        if is_default is not None:
+            conn.execute("UPDATE media_library SET is_default = 0")
+            conn.execute("UPDATE media_library SET is_default = 1 WHERE id = ?", (lib_id,))
+        if name is not None:
+            conn.execute("UPDATE media_library SET name = ? WHERE id = ?", (name, lib_id))
+        if path is not None:
+            conn.execute("UPDATE media_library SET path = ? WHERE id = ?", (path, lib_id))
+
+
+def delete_media_library(lib_id: int):
+    """删除媒体库"""
+    with get_db() as conn:
+        was_default = conn.execute("SELECT is_default FROM media_library WHERE id = ?", (lib_id,)).fetchone()
+        conn.execute("DELETE FROM media_library WHERE id = ?", (lib_id,))
+        # 如果删的是默认库，把第一个设为默认
+        if was_default and was_default[0]:
+            first = conn.execute("SELECT id FROM media_library ORDER BY created_at LIMIT 1").fetchone()
+            if first:
+                conn.execute("UPDATE media_library SET is_default = 1 WHERE id = ?", (first[0],))
