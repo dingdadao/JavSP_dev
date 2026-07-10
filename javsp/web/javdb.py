@@ -43,7 +43,11 @@ os.makedirs(DATA_DIR, exist_ok=True)
 
 # genre_map = GenreMap(os.path.join(DATA_DIR, 'genre_javdb.csv'))
 permanent_url = 'https://javdb.com'
-base_url = Cfg().network.get_crawler_url(CrawlerID.javdb, permanent_url)
+base_url = (
+    permanent_url
+    if Cfg().network.proxy_server
+    else str(Cfg().network.proxy_free[CrawlerID.javdb])
+).rstrip('/')
 
 
 def retry_request(url, max_retries=3, delay=3):
@@ -210,6 +214,13 @@ def parse_data(movie: MovieInfo):
     ).text_content().strip() if info.xpath("div/strong[text()='發行:']") else None
     movie.serial = info.xpath("div/strong[text()='系列:']")[0].getnext(
     ).text_content().strip() if info.xpath("div/strong[text()='系列:']") else None
+
+    # 简介（JavDB 页面有「簡介:」字段）
+    plot_tags = info.xpath("div/strong[text()='簡介:']")
+    if plot_tags:
+        plot_text = plot_tags[0].getparent().text_content().replace('簡介:', '').strip()
+        if plot_text:
+            movie.plot = plot_text
 
     score_tag = html2.xpath("//span[@class='score-stars']")
     if score_tag:

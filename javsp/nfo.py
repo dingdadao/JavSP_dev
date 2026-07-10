@@ -1,6 +1,5 @@
 """与操作nfo文件相关的功能"""
 import logging
-from datetime import datetime
 from lxml.etree import tostring
 from lxml.builder import E
 
@@ -29,24 +28,7 @@ def write_nfo(info: MovieInfo, nfo_file):
     elif info.cid:
         nfo.append(E.sorttitle(info.cid))
     
-    # 飞牛 NAS 兼容模式：添加飞牛特定的字段
     fnos_compatible = Cfg().summarizer.nfo.fnos_compatible
-    logger.debug(f"飞牛兼容模式: {fnos_compatible}")
-    if fnos_compatible:
-        logger.info("启用飞牛 NAS 兼容模式，添加飞牛特定字段")
-        # 飞牛可能优先读取 <name> 字段而不是 <title>
-        nfo.append(E.name(display_title))
-        # 添加番号到 customid 字段（飞牛可能用此字段识别）
-        if info.dvdid:
-            nfo.append(E.customid(info.dvdid))
-        # 飞牛需要 <dateadded> 字段
-        nfo.append(E.dateadded(datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-        # 飞牛需要 <lockdata> 字段
-        nfo.append(E.lockdata('false'))
-        # 飞牛需要 <year> 字段（从 publish_date 提取）
-        if info.publish_date:
-            year = info.publish_date.split('-')[0]
-            nfo.append(E.year(year))
 
     # 仅在标题被成功翻译过时才写入 originaltitle
     # 爬虫设置的原文（如 JavDB 的日文标题）不写入，避免飞牛显示错误
@@ -125,9 +107,12 @@ def write_nfo(info: MovieInfo, nfo_file):
     if info.director:
         nfo.append(E.director(info.director))
 
-    # 发行日期。文档中关于'year'字段的说明: Do not use. Use <premiered> instead
+    # 发行日期（YYYY-MM-DD）
     if info.publish_date:
         nfo.append(E.premiered(info.publish_date))
+        year = info.publish_date.split('-')[0]
+        if year.isdigit():
+            nfo.append(E.year(year))
 
     # 原文是 Production studio: 因此这里写入的是影片制作商
     if info.producer:

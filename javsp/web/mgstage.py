@@ -32,11 +32,15 @@ def parse_data(movie: MovieInfo):
 
     html = resp2html(resp)
     logger.debug(f"mgstage 开始解析 HTML")
+    # 检测年龄验证页面（mgstage 更新了验证机制，adc cookie 已失效）
+    if '成人認証' in resp.text or 'ADULT_CERTIFICATION' in resp.text:
+        logger.warning("mgstage 需要年龄验证，当前无法自动绕过，跳过此爬虫")
+        raise MovieNotFoundError(__name__, movie.dvdid, "需要年龄验证")
     # mgstage的文本中含有大量的空白字符（'\n \t'），需要使用strip去除
     title_tags = html.xpath("//div[@class='common_detail_cover']/h1/text()")
     logger.debug(f"mgstage 标题标签: {title_tags}")
     if not title_tags:
-        logger.error("mgstage 无法找到标题，页面结构可能已改变")
+        logger.warning("mgstage 无法找到标题，页面结构可能已改变")
         raise MovieNotFoundError(__name__, movie.dvdid, "无法找到标题")
     title = title_tags[0].strip()
     container = html.xpath("//div[@class='detail_left']")[0]

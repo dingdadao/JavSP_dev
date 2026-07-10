@@ -331,7 +331,7 @@ class Other(BaseConfig):
 
 def get_config_source():
     parser = ArgumentParser(
-        prog='JavSP', description='汇总多站点数据的AV元数据刮削器', formatter_class=RawTextHelpFormatter)
+        prog='dingdadaoSp', description='汇总多站点数据的AV元数据刮削器', formatter_class=RawTextHelpFormatter)
     parser.add_argument('-c', '--config', help='使用指定的配置文件')
     args, _ = parser.parse_known_args()
     sources = []

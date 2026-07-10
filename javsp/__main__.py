@@ -411,6 +411,9 @@ def generate_names(movie: Movie):
     
     # 获取影片文件名的命名规则，如果未配置则使用 basename_pattern
     file_basename_pattern = Cfg().summarizer.path.file_basename_pattern or Cfg().summarizer.path.basename_pattern
+
+    # 飞牛 NAS 兼容模式：图片必须命名为 {视频同名}-poster / {视频同名}-fanart
+    fnos_mode = Cfg().summarizer.nfo.fnos_compatible
     
     for end in range(len(ori_title_break), 0, -1):
         copyd['rawtitle'] = replace_illegal_chars(
@@ -440,11 +443,15 @@ def generate_names(movie: Movie):
                 movie.save_dir = save_dir
                 movie.basename = file_basename
                 movie.nfo_file = os.path.join(
-                    save_dir, Cfg().summarizer.nfo.basename_pattern.format(**copyd) + '.nfo')
-                movie.fanart_file = os.path.join(
-                    save_dir, Cfg().summarizer.fanart.basename_pattern.format(**copyd) + '.jpg')
-                movie.poster_file = os.path.join(
-                    save_dir, Cfg().summarizer.cover.basename_pattern.format(**copyd) + '.jpg')
+                    save_dir, file_basename + '.nfo')
+                if fnos_mode:
+                    movie.fanart_file = os.path.join(save_dir, file_basename + '-fanart.jpg')
+                    movie.poster_file = os.path.join(save_dir, file_basename + '-poster.jpg')
+                else:
+                    movie.fanart_file = os.path.join(
+                        save_dir, Cfg().summarizer.fanart.basename_pattern.format(**copyd) + '.jpg')
+                    movie.poster_file = os.path.join(
+                        save_dir, Cfg().summarizer.cover.basename_pattern.format(**copyd) + '.jpg')
                 return legalize_info()
     else:
         # 以防万一，当整理路径非常深或者标题起始很长一段没有标点符号时，硬性截短生成的名称
@@ -468,11 +475,15 @@ def generate_names(movie: Movie):
         movie.basename = file_basename
 
         movie.nfo_file = os.path.join(
-            save_dir, Cfg().summarizer.nfo.basename_pattern.format(**copyd) + '.nfo')
-        movie.fanart_file = os.path.join(
-            save_dir, Cfg().summarizer.fanart.basename_pattern.format(**copyd) + '.jpg')
-        movie.poster_file = os.path.join(
-            save_dir, Cfg().summarizer.cover.basename_pattern.format(**copyd) + '.jpg')
+            save_dir, file_basename + '.nfo')
+        if fnos_mode:
+            movie.fanart_file = os.path.join(save_dir, file_basename + '-fanart.jpg')
+            movie.poster_file = os.path.join(save_dir, file_basename + '-poster.jpg')
+        else:
+            movie.fanart_file = os.path.join(
+                save_dir, Cfg().summarizer.fanart.basename_pattern.format(**copyd) + '.jpg')
+            movie.poster_file = os.path.join(
+                save_dir, Cfg().summarizer.cover.basename_pattern.format(**copyd) + '.jpg')
 
         return legalize_info()
 
@@ -525,7 +536,7 @@ def process_poster(movie: Movie):
     crop_engine = None
     if (movie.info.uncensored or
        movie.data_src == 'fc2' or
-       should_use_ai_crop_match(movie.info.label.upper())):
+       (movie.dvdid and should_use_ai_crop_match(movie.dvdid.upper()))):
         crop_engine = Cfg().summarizer.cover.crop.engine
     cropper = get_cropper(crop_engine)
     fanart_image = Image.open(movie.fanart_file)
@@ -829,7 +840,7 @@ def entry():
     colorama.init(autoreset=True)
 
     # 检查更新
-    version_info = 'JavSP ' + getattr(sys, 'javsp_version', '未知版本/从代码运行')
+    version_info = 'dingdadaoSp ' + getattr(sys, 'javsp_version', '未知版本/从代码运行')
     logger.debug(version_info.center(60, '='))
     # check_update(Cfg().other.check_update, Cfg().other.auto_update)
     root = get_scan_dir(Cfg().scanner.input_directory)
