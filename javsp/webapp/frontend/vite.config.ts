@@ -16,5 +16,15 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-antd': ['antd'],
+          'vendor-icons': ['@ant-design/icons'],
+          'vendor-utils': ['axios', 'dayjs', 'socket.io-client'],
+        },
+      },
+    },
   },
 })

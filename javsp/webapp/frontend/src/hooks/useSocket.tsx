@@ -1,6 +1,13 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { io, Socket } from 'socket.io-client'
 
+interface ScrapeResultItem {
+  dvdid: string
+  source: string
+  dest_path?: string
+  message?: string
+}
+
 interface ScrapeProgress {
   task_id: string
   status: string
@@ -8,8 +15,12 @@ interface ScrapeProgress {
   completed?: number
   success?: number
   failed?: number
+  unrecognized?: number
   current?: string
   message?: string
+  results_success?: ScrapeResultItem[]
+  results_failed?: ScrapeResultItem[]
+  results_unrecognized?: string[]
 }
 
 interface WatcherEvent {

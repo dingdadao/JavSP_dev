@@ -96,11 +96,10 @@ export default function Tasks() {
   const statusMap: Record<string, { color: string; text: string }> = {
     completed: { color: 'success', text: '完成' },
     running: { color: 'processing', text: '运行中' },
-    partial: { color: 'warning', text: '部分完成' },
     failed: { color: 'error', text: '失败' },
     pending: { color: 'default', text: '等待中' },
     error: { color: 'error', text: '异常' },
-    stopped: { color: 'warning', text: '已停止' },
+    stopped: { color: 'warning', text: '已中断' },
   }
 
   const columns = [

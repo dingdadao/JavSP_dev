@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import {
   Card, Button, Space, Switch, Typography, Form, Input,
-  Alert, Progress, Tag, Steps, Result, Row, Col, Select, App
+  Alert, Progress, Tag, Steps, Result, Row, Col, Select, App,
+  Collapse, List, Tooltip,
 } from 'antd'
 import {
   PlayCircleOutlined, ScanOutlined, CheckCircleOutlined,
   LoadingOutlined, RocketOutlined, DatabaseOutlined,
-  PauseCircleOutlined, ThunderboltOutlined, SaveOutlined, FolderOpenOutlined
+  PauseCircleOutlined, SaveOutlined, FolderOpenOutlined,
+  WarningOutlined, ExclamationCircleOutlined,
 } from '@ant-design/icons'
 import { useSocket } from '../hooks/useSocket'
 import { createScrapeTask, fetchConfig, fetchScrapeStatus, stopScrapeTask, fetchMediaLibraries, updateConfig } from '../api'
@@ -28,6 +30,24 @@ export default function Scrape() {
     loadConfig()
     checkRunningTask()
   }, [])
+
+  // 轮询兜底：如果 stopping 为 true 但超过 3 秒没收到终态，主动拉取状态
+  useEffect(() => {
+    if (!stopping) return
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetchScrapeStatus()
+        if (res.code === 0 && res.data) {
+          const s = res.data.status
+          if (s !== 'running') {
+            setStopping(false)
+            clearInterval(timer)
+          }
+        }
+      } catch { /* ignore */ }
+    }, 2000)
+    return () => clearInterval(timer)
+  }, [stopping])
 
   const checkRunningTask = async () => {
     try {
@@ -133,7 +153,7 @@ export default function Scrape() {
   }
 
   const isRunning = currentProgress?.status === 'running'
-  const isDone = taskId && currentProgress && ['completed', 'partial', 'failed', 'error', 'stopped'].includes(currentProgress.status)
+  const isDone = taskId && currentProgress && ['completed', 'failed', 'error', 'stopped'].includes(currentProgress.status)
 
   useEffect(() => {
     if (isDone) {
@@ -278,22 +298,28 @@ export default function Scrape() {
                   size="default"
                 />
                 <Row gutter={16}>
-                  <Col span={8}>
+                  <Col span={6}>
                     <Card size="small" variant="borderless">
                       <Typography.Text type="secondary">总计</Typography.Text>
                       <div style={{ fontSize: 24, fontWeight: 'bold' }}>{currentProgress.total || 0}</div>
                     </Card>
                   </Col>
-                  <Col span={8}>
+                  <Col span={6}>
                     <Card size="small" variant="borderless">
                       <Typography.Text type="secondary">成功</Typography.Text>
                       <div style={{ fontSize: 24, fontWeight: 'bold', color: '#22c55e' }}>{currentProgress.success || 0}</div>
                     </Card>
                   </Col>
-                  <Col span={8}>
+                  <Col span={6}>
                     <Card size="small" variant="borderless">
                       <Typography.Text type="secondary">失败</Typography.Text>
                       <div style={{ fontSize: 24, fontWeight: 'bold', color: '#ef4444' }}>{currentProgress.failed || 0}</div>
+                    </Card>
+                  </Col>
+                  <Col span={6}>
+                    <Card size="small" variant="borderless">
+                      <Typography.Text type="secondary">未识别</Typography.Text>
+                      <div style={{ fontSize: 24, fontWeight: 'bold', color: '#faad14' }}>{currentProgress.unrecognized || 0}</div>
                     </Card>
                   </Col>
                 </Row>
@@ -301,11 +327,7 @@ export default function Scrape() {
             )}
 
             {isDone && currentProgress && (
-              <Result
-                status={currentProgress.status === 'completed' ? 'success' : currentProgress.status === 'failed' ? 'error' : 'warning'}
-                title={currentProgress.message}
-                subTitle={`成功 ${currentProgress.success || 0} / ${currentProgress.total || 0}`}
-              />
+              <ScrapeResult progress={currentProgress} />
             )}
 
             {!isRunning && !isDone && (
@@ -319,6 +341,158 @@ export default function Scrape() {
           </Card>
         </Col>
       </Row>
+    </div>
+  )
+}
+
+function ScrapeResult({ progress }: { progress: any }) {
+  const successCount = progress.success || 0
+  const failedCount = progress.failed || 0
+  const unrecognizedCount = progress.unrecognized || 0
+  const totalCount = progress.total || 0
+
+  const statusColor = progress.status === 'completed' ? 'success'
+    : progress.status === 'stopped' ? 'warning'
+    : 'error'
+
+  const statusText = progress.status === 'completed' ? '刮削完成'
+    : progress.status === 'stopped' ? '任务已中断'
+    : '任务失败（有失败项）'
+
+  // 计算跳过数（总数 - 成功 - 失败，负数则置0）
+  const skippedCount = Math.max(0, totalCount - successCount - failedCount)
+
+  const resultsSuccess = progress.results_success || []
+  const resultsFailed = progress.results_failed || []
+  const resultsUnrecognized = progress.results_unrecognized || []
+
+  const collapseItems = []
+
+  if (failedCount > 0) {
+    collapseItems.push({
+      key: 'failed',
+      label: (
+        <Space>
+          <ExclamationCircleOutlined style={{ color: '#ef4444' }} />
+          <span>失败 ({failedCount})</span>
+        </Space>
+      ),
+      children: (
+        <List
+          size="small"
+          dataSource={resultsFailed}
+          renderItem={(item: any) => (
+            <List.Item style={{ padding: '4px 0' }}>
+              <Tooltip title={item.source}>
+                <Typography.Text code>{item.dvdid}</Typography.Text>
+              </Tooltip>
+              <Typography.Text type="danger" style={{ marginLeft: 8, fontSize: 12 }}>
+                {item.message}
+              </Typography.Text>
+            </List.Item>
+          )}
+        />
+      ),
+    })
+  }
+
+  if (unrecognizedCount > 0) {
+    collapseItems.push({
+      key: 'unrecognized',
+      label: (
+        <Space>
+          <WarningOutlined style={{ color: '#faad14' }} />
+          <span>未识别番号 ({unrecognizedCount})</span>
+        </Space>
+      ),
+      children: (
+        <List
+          size="small"
+          dataSource={resultsUnrecognized}
+          renderItem={(path: string) => (
+            <List.Item style={{ padding: '2px 0' }}>
+              <Tooltip title={path}>
+                <Typography.Text type="warning" style={{ fontSize: 12, wordBreak: 'break-all' }}>
+                  {path.split('/').pop() || path}
+                </Typography.Text>
+              </Tooltip>
+            </List.Item>
+          )}
+        />
+      ),
+    })
+  }
+
+  if (successCount > 0) {
+    collapseItems.push({
+      key: 'success',
+      label: (
+        <Space>
+          <CheckCircleOutlined style={{ color: '#22c55e' }} />
+          <span>成功 ({successCount})</span>
+        </Space>
+      ),
+      children: (
+        <List
+          size="small"
+          dataSource={resultsSuccess}
+          renderItem={(item: any) => (
+            <List.Item style={{ padding: '4px 0' }}>
+              <Tooltip title={item.source}>
+                <Typography.Text code>{item.dvdid}</Typography.Text>
+              </Tooltip>
+              {item.dest_path && (
+                <Typography.Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
+                  {item.dest_path.split('/').pop()}
+                </Typography.Text>
+              )}
+            </List.Item>
+          )}
+        />
+      ),
+    })
+  }
+
+  return (
+    <div>
+      <Result
+        status={statusColor}
+        title={statusText}
+        subTitle={progress.message}
+      />
+      <Row gutter={16} style={{ marginBottom: 16 }}>
+        <Col span={6}>
+          <Card size="small" variant="borderless">
+            <Typography.Text type="secondary">总计</Typography.Text>
+            <div style={{ fontSize: 20, fontWeight: 'bold' }}>{totalCount}</div>
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small" variant="borderless">
+            <Typography.Text type="secondary">成功</Typography.Text>
+            <div style={{ fontSize: 20, fontWeight: 'bold', color: '#22c55e' }}>{successCount}</div>
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small" variant="borderless">
+            <Typography.Text type="secondary">失败</Typography.Text>
+            <div style={{ fontSize: 20, fontWeight: 'bold', color: '#ef4444' }}>{failedCount}</div>
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small" variant="borderless">
+            <Typography.Text type="secondary">未识别番号</Typography.Text>
+            <div style={{ fontSize: 20, fontWeight: 'bold', color: '#faad14' }}>{unrecognizedCount}</div>
+          </Card>
+        </Col>
+      </Row>
+      {collapseItems.length > 0 && (
+        <Collapse
+          items={collapseItems}
+          defaultActiveKey={['failed', 'unrecognized']}
+          size="small"
+        />
+      )}
     </div>
   )
 }

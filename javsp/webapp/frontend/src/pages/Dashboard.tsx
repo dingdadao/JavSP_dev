@@ -201,11 +201,11 @@ export default function Dashboard() {
                         <Tag color={
                           task.status === 'completed' ? 'success' :
                           task.status === 'running' ? 'processing' :
-                          task.status === 'partial' ? 'warning' : 'error'
+                          task.status === 'stopped' ? 'warning' : 'error'
                         }>
                           {task.status === 'completed' ? '完成' :
                            task.status === 'running' ? '运行中' :
-                           task.status === 'partial' ? '部分完成' : '失败'}
+                           task.status === 'stopped' ? '已中断' : '失败'}
                         </Tag>
                         <Typography.Text copyable={{ text: task.id }}>
                           {task.id?.slice(0, 8)}

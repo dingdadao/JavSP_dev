@@ -1,5 +1,6 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom'
-import { Layout, Menu, Typography, Badge } from 'antd'
+import { Layout, Menu, Typography, Badge, Spin } from 'antd'
 import {
   DashboardOutlined,
   PlayCircleOutlined,
@@ -9,17 +10,26 @@ import {
   FileTextOutlined,
   ToolOutlined,
 } from '@ant-design/icons'
-import Dashboard from './pages/Dashboard'
-import Scrape from './pages/Scrape'
-import Tasks from './pages/Tasks'
-import Config from './pages/Config'
-import Watcher from './pages/Watcher'
-import Logs from './pages/Logs'
-import MovieDetail from './pages/MovieDetail'
-import Checker from './pages/Checker'
 import { SocketProvider } from './hooks/useSocket'
 
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Scrape = lazy(() => import('./pages/Scrape'))
+const Tasks = lazy(() => import('./pages/Tasks'))
+const Config = lazy(() => import('./pages/Config'))
+const Watcher = lazy(() => import('./pages/Watcher'))
+const Logs = lazy(() => import('./pages/Logs'))
+const MovieDetail = lazy(() => import('./pages/MovieDetail'))
+const Checker = lazy(() => import('./pages/Checker'))
+
 const { Header, Sider, Content } = Layout
+
+function Loading() {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
+      <Spin size="large" />
+    </div>
+  )
+}
 
 function AppLayout() {
   const location = useLocation()
@@ -76,16 +86,18 @@ function AppLayout() {
           <Badge status="processing" text={<span style={{ color: 'rgba(255,255,255,0.45)' }}>运行中</span>} />
         </Header>
         <Content style={{ margin: 16, overflow: 'auto' }}>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/scrape" element={<Scrape />} />
-            <Route path="/tasks" element={<Tasks />} />
-            <Route path="/config" element={<Config />} />
-            <Route path="/watcher" element={<Watcher />} />
-            <Route path="/logs" element={<Logs />} />
-            <Route path="/movie" element={<MovieDetail />} />
-            <Route path="/checker" element={<Checker />} />
-          </Routes>
+          <Suspense fallback={<Loading />}>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/scrape" element={<Scrape />} />
+              <Route path="/tasks" element={<Tasks />} />
+              <Route path="/config" element={<Config />} />
+              <Route path="/watcher" element={<Watcher />} />
+              <Route path="/logs" element={<Logs />} />
+              <Route path="/movie" element={<MovieDetail />} />
+              <Route path="/checker" element={<Checker />} />
+            </Routes>
+          </Suspense>
         </Content>
       </Layout>
     </Layout>
