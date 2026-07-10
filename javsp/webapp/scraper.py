@@ -237,17 +237,19 @@ def _scrape_single(movie, translate: bool, dest_path: str, move_files: bool, mai
                 except Exception as e:
                     logger.warning(f"翻译失败 {movie.dvdid}: {e}")
 
-        # 生成文件名和路径
+        # 用 web 界面传入的输出路径覆盖配置，然后生成命名
+        cfg = Cfg()
+        object.__setattr__(cfg.summarizer.path, 'output_folder_pattern', dest_path)
         main_module.generate_names(movie)
 
-        # 创建输出目录
-        movie_save_dir = os.path.join(dest_path, replace_illegal_chars(movie.dvdid or movie.cid))
-        os.makedirs(movie_save_dir, exist_ok=True)
-        movie.save_dir = movie_save_dir
+        if not movie.save_dir:
+            result['message'] = '无法生成目标路径'
+            return result
+
+        os.makedirs(movie.save_dir, exist_ok=True)
 
         # 下载封面图片
         try:
-            cfg = Cfg()
             big_covers = movie.info.big_covers if cfg.summarizer.cover.highres else None
             cover_dl = main_module.download_cover(movie.info.covers, movie.fanart_file, big_covers)
             if cover_dl is None:
@@ -265,7 +267,6 @@ def _scrape_single(movie, translate: bool, dest_path: str, move_files: bool, mai
             logger.warning(f"封面处理异常 {movie.dvdid}: {e}")
 
         # 下载剧照
-        cfg = Cfg()
         if cfg.summarizer.extra_fanarts.enabled and getattr(movie.info, 'preview_pics', None):
             try:
                 extrafanartdir = movie.save_dir + '/extrafanart'
@@ -285,23 +286,25 @@ def _scrape_single(movie, translate: bool, dest_path: str, move_files: bool, mai
             except Exception as e:
                 logger.warning(f"剧照处理异常 {movie.dvdid}: {e}")
 
-        # 保存 NFO
-        nfo_path = os.path.join(movie_save_dir, f"{movie.dvdid or movie.cid}.nfo")
-        write_nfo(movie.info, nfo_path)
+        # 写入 NFO
+        write_nfo(movie.info, movie.nfo_file)
 
-        # 移动或复制文件
-        new_files = []
-        for file_path in movie.files:
-            file_name = os.path.basename(file_path)
-            dest_file = os.path.join(movie_save_dir, file_name)
-            if move_files:
-                os.rename(file_path, dest_file)
-            else:
+        # 使用 movie.rename_files 移动/重命名文件（与命令行逻辑一致）
+        root = os.path.dirname(movie.files[0]) if movie.files else None
+        if move_files:
+            movie.rename_files(cfg.summarizer.path.hard_link, root=root)
+        else:
+            # 复制模式：手动复制并重命名
+            new_files = []
+            for file_path in movie.files:
+                basename = movie.basename or os.path.splitext(os.path.basename(file_path))[0]
+                ext = os.path.splitext(file_path)[1]
+                dest_file = os.path.join(movie.save_dir, basename + ext)
                 shutil.copy2(file_path, dest_file)
-            new_files.append(dest_file)
+                new_files.append(dest_file)
+            movie.files = new_files
 
-        movie.files = new_files
-        result['dest_path'] = movie_save_dir
+        result['dest_path'] = movie.save_dir
         result['success'] = True
         result['message'] = '刮削成功'
 
