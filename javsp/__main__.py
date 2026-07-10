@@ -881,8 +881,9 @@ def download_extrafanart_concurrent(movie, extrafanartdir, progress_bar):
 
         try:
             # 更新进度条描述
-            progress_bar.set_description(
-                f"Downloading extrafanart {id} from url: {pic_url}")
+            if progress_bar is not None:
+                progress_bar.set_description(
+                    f"Downloading extrafanart {id} from url: {pic_url}")
 
             # 使用线程锁保护下载操作
             with download_lock:
