@@ -52,11 +52,43 @@ def apply_web_config():
         _override(cfg.crawler.selection, 'normal', [CrawlerID(c) for c in crawler_cfg['selection_normal']])
     if 'selection_fc2' in crawler_cfg:
         _override(cfg.crawler.selection, 'fc2', [CrawlerID(c) for c in crawler_cfg['selection_fc2']])
+    if 'hardworking' in crawler_cfg:
+        _override(cfg.crawler, 'hardworking', bool(crawler_cfg['hardworking']))
+    if 'sleep_after_scraping' in crawler_cfg:
+        _override(cfg.crawler, 'sleep_after_scraping', crawler_cfg['sleep_after_scraping'])
 
     # 爬虫镜像地址
     network_cfg = db_config.get('network', {})
     if 'crawler_mirror' in network_cfg and isinstance(network_cfg['crawler_mirror'], dict):
         _override(cfg.network, 'crawler_mirror', {CrawlerID(k): v for k, v in network_cfg['crawler_mirror'].items()})
+    if 'proxy_server' in network_cfg:
+        _override(cfg.network, 'proxy_server', network_cfg['proxy_server'] or None)
+    if 'retry' in network_cfg:
+        _override(cfg.network, 'retry', network_cfg['retry'])
+    if 'timeout' in network_cfg:
+        _override(cfg.network, 'timeout', network_cfg['timeout'])
+    if 'ssl_verification' in network_cfg:
+        _override(cfg.network, 'ssl_verification', bool(network_cfg['ssl_verification']))
+
+    # 整理/命名设置
+    summarizer_cfg = db_config.get('summarizer', {})
+    if 'output_folder_pattern' in summarizer_cfg and summarizer_cfg['output_folder_pattern']:
+        _override(cfg.summarizer.path, 'output_folder_pattern', summarizer_cfg['output_folder_pattern'])
+    if 'basename_pattern' in summarizer_cfg and summarizer_cfg['basename_pattern']:
+        _override(cfg.summarizer.path, 'basename_pattern', summarizer_cfg['basename_pattern'])
+    if 'nfo_title_pattern' in summarizer_cfg and summarizer_cfg['nfo_title_pattern']:
+        _override(cfg.summarizer.nfo, 'title_pattern', summarizer_cfg['nfo_title_pattern'])
+    if 'fnos_compatible' in summarizer_cfg:
+        _override(cfg.summarizer.nfo, 'fnos_compatible', bool(summarizer_cfg['fnos_compatible']))
+    if 'move_files' in summarizer_cfg:
+        _override(cfg.summarizer, 'move_files', bool(summarizer_cfg['move_files']))
+
+    # 封面设置
+    cover_cfg = db_config.get('cover', {})
+    if 'highres' in cover_cfg:
+        _override(cfg.summarizer.cover, 'highres', bool(cover_cfg['highres']))
+    if 'add_label' in cover_cfg:
+        _override(cfg.summarizer.cover, 'add_label', bool(cover_cfg['add_label']))
 
     # 翻译设置
     translator_cfg = db_config.get('translator', {})
@@ -69,7 +101,7 @@ def apply_web_config():
     if 'translate_plot' in translator_cfg:
         _override(cfg.translator.fields, 'plot', bool(translator_cfg['translate_plot']))
 
-    logger.debug(f"Web 配置已应用: 爬虫列表={[c.value for c in cfg.crawler.selection.normal]}")
+    logger.debug(f"Web 配置已应用")
 
 
 def run_scrape_task(task_id: str, source: str, dest: str,
@@ -237,9 +269,8 @@ def _scrape_single(movie, translate: bool, dest_path: str, move_files: bool, mai
                 except Exception as e:
                     logger.warning(f"翻译失败 {movie.dvdid}: {e}")
 
-        # 用 web 界面传入的输出路径覆盖配置，然后生成命名
+        # 生成命名（output_folder_pattern 已由 apply_web_config 从数据库同步）
         cfg = Cfg()
-        object.__setattr__(cfg.summarizer.path, 'output_folder_pattern', dest_path)
         main_module.generate_names(movie)
 
         if not movie.save_dir:

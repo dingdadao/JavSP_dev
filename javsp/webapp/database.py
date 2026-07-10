@@ -149,6 +149,7 @@ def seed_default_config():
         ('summarizer', 'output_folder_pattern', '', 'str', '输出文件夹路径模式', ''),
         ('summarizer', 'basename_pattern', '{title}', 'str', '文件命名规则', '{title}'),
         ('summarizer', 'nfo_title_pattern', '{title}', 'str', 'NFO 中的标题格式', '{title}'),
+        ('summarizer', 'fnos_compatible', 'false', 'bool', '飞牛 NAS 兼容模式', 'false'),
 
         # translator 配置
         ('translator', 'engine', '', 'str', '翻译引擎 (google/bing/baidu/openai/localai)', ''),

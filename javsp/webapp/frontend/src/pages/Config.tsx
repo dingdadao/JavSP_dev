@@ -178,6 +178,7 @@ function SummarizerConfig({ saving, onSave }: { saving: boolean; onSave: (v: any
         nfo_title_pattern: s.nfo_title_pattern || '{title}',
         checker_nfo_title_pattern: s.checker_nfo_title_pattern || '',
         checker_default_path: s.checker_default_path || '',
+        fnos_compatible: s.fnos_compatible ?? false,
       })
     }).finally(() => setLoading(false))
   }, [])
@@ -211,6 +212,12 @@ function SummarizerConfig({ saving, onSave }: { saving: boolean; onSave: (v: any
             name="nfo_title_pattern"
           >
             <Input placeholder="{title}" />
+          </Form.Item>
+          <Form.Item
+            label={<span>飞牛 NAS 兼容模式<Tip text="开启后 NFO 文件会添加飞牛特定字段（如 <name>、<customid>），飞牛可能优先读取 <name> 而不是 <title>" /></span>}
+            name="fnos_compatible" valuePropName="checked"
+          >
+            <Switch />
           </Form.Item>
           <Form.Item
             label={<span>检查器 NFO 标题格式<Tip text="命名检查器重新刮削时使用的 NFO 标题格式。留空则使用上方的全局 NFO 标题格式" /></span>}
