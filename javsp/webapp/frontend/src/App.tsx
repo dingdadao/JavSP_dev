@@ -51,7 +51,7 @@ function AppLayout() {
           borderBottom: '1px solid rgba(99,102,241,0.15)',
         }}>
           <Typography.Title level={4} style={{ margin: 0, color: '#6366f1' }}>
-            dingdadaoSp Web
+            Jav Manager
           </Typography.Title>
         </div>
         <Menu

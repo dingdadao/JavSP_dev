@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import {
   Card, Form, Input, Button, Switch, Select, InputNumber,
-  Typography, Tabs, Space, Spin, Collapse, Tag, Tooltip, Alert, App
+  Typography, Tabs, Space, Spin, Collapse, Tag, Tooltip, Alert, Table, Modal, App
 } from 'antd'
-import { SaveOutlined, SettingOutlined } from '@ant-design/icons'
-import { fetchConfig, updateConfig } from '../api'
+import { SaveOutlined, SettingOutlined, PlusOutlined, DeleteOutlined, StarOutlined, StarFilled } from '@ant-design/icons'
+import { fetchConfig, updateConfig, fetchMediaLibraries, createMediaLibrary, updateMediaLibrary, deleteMediaLibrary } from '../api'
 
 const CRAWLER_OPTIONS = [
   { label: 'JavDB', value: 'javdb' },
@@ -472,6 +472,155 @@ function WatcherConfig({ saving, onSave }: { saving: boolean; onSave: (v: any) =
   )
 }
 
+function MediaLibraryConfig() {
+  const [libraries, setLibraries] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editId, setEditId] = useState<number | null>(null)
+  const [form] = Form.useForm()
+  const { message } = App.useApp()
+
+  const loadLibraries = async () => {
+    setLoading(true)
+    try {
+      const { data } = await fetchMediaLibraries()
+      setLibraries(data || [])
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { loadLibraries() }, [])
+
+  const handleAdd = () => {
+    setEditId(null)
+    form.resetFields()
+    form.setFieldsValue({ is_default: libraries.length === 0 })
+    setModalOpen(true)
+  }
+
+  const handleEdit = (record: any) => {
+    setEditId(record.id)
+    form.setFieldsValue({ name: record.name, path: record.path, is_default: !!record.is_default })
+    setModalOpen(true)
+  }
+
+  const handleDelete = async (id: number) => {
+    try {
+      await deleteMediaLibrary(id)
+      message.success('媒体库已删除')
+      loadLibraries()
+    } catch (e) {
+      message.error('删除失败')
+    }
+  }
+
+  const handleSetDefault = async (id: number) => {
+    try {
+      await updateMediaLibrary(id, { is_default: true })
+      message.success('已设为默认')
+      loadLibraries()
+    } catch (e) {
+      message.error('操作失败')
+    }
+  }
+
+  const handleModalOk = async () => {
+    try {
+      const values = await form.validateFields()
+      if (editId) {
+        await updateMediaLibrary(editId, values)
+        message.success('媒体库已更新')
+      } else {
+        await createMediaLibrary(values)
+        message.success('媒体库已添加')
+      }
+      setModalOpen(false)
+      loadLibraries()
+    } catch (e: any) {
+      if (e?.response?.data?.message) {
+        message.error(e.response.data.message)
+      }
+    }
+  }
+
+  const columns = [
+    {
+      title: '名称',
+      dataIndex: 'name',
+      render: (name: string, record: any) => (
+        <Space>
+          {record.is_default ? <StarFilled style={{ color: '#f59e0b' }} /> : <StarOutlined style={{ color: 'rgba(255,255,255,0.25)' }} />}
+          {name}
+        </Space>
+      ),
+    },
+    {
+      title: '路径',
+      dataIndex: 'path',
+      ellipsis: true,
+    },
+    {
+      title: '操作',
+      width: 220,
+      render: (_: any, record: any) => (
+        <Space>
+          <Button size="small" onClick={() => handleEdit(record)}>编辑</Button>
+          {!record.is_default && (
+            <Button size="small" icon={<StarOutlined />} onClick={() => handleSetDefault(record.id)}>设为默认</Button>
+          )}
+          <Button size="small" danger icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)}>删除</Button>
+        </Space>
+      ),
+    },
+  ]
+
+  return (
+    <Card
+      title="媒体库配置"
+      variant="borderless"
+      extra={
+        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>添加媒体库</Button>
+      }
+    >
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 16 }}
+        message="媒体库用于管理多个不同的影片存储路径，刮削时可选择特定媒体库进行扫描。第一个添加的媒体库自动设为默认。"
+      />
+      <Table
+        dataSource={libraries}
+        columns={columns}
+        rowKey="id"
+        loading={loading}
+        pagination={false}
+        locale={{ emptyText: '暂未配置媒体库，请添加' }}
+      />
+      <Modal
+        title={editId ? '编辑媒体库' : '添加媒体库'}
+        open={modalOpen}
+        onOk={handleModalOk}
+        onCancel={() => setModalOpen(false)}
+      >
+        <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item label="名称" name="name" rules={[{ required: true, message: '请输入名称' }]}>
+            <Input placeholder="如：主库、外挂硬盘等" />
+          </Form.Item>
+          <Form.Item label="路径" name="path" rules={[{ required: true, message: '请输入路径' }]}>
+            <Input placeholder="/path/to/library" />
+          </Form.Item>
+          <Form.Item label="设为默认" name="is_default" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </Card>
+  )
+}
+
 export default function Config() {
   const [saving, setSaving] = useState(false)
   const { message } = App.useApp()
@@ -496,15 +645,35 @@ export default function Config() {
       </Typography.Title>
 
       <Tabs
-        tabPosition="left"
         items={[
-          { key: 'scanner', label: '扫描设置', children: <ScannerConfig saving={saving} onSave={(v) => handleSave('scanner', v)} /> },
-          { key: 'network', label: '网络设置', children: <NetworkConfig saving={saving} onSave={(v) => handleSave('network', v)} /> },
-          { key: 'crawler', label: '爬虫设置', children: <CrawlerConfig saving={saving} onSave={(v) => handleSave('crawler', v)} /> },
-          { key: 'summarizer', label: '整理设置', children: <SummarizerConfig saving={saving} onSave={(v) => handleSave('summarizer', v)} /> },
-          { key: 'translator', label: '翻译设置', children: <TranslatorConfig saving={saving} onSave={(v) => handleSave('translator', v)} /> },
-          { key: 'cover', label: '封面设置', children: <CoverConfig saving={saving} onSave={(v) => handleSave('cover', v)} /> },
-          { key: 'watcher', label: '监控设置', children: <WatcherConfig saving={saving} onSave={(v) => handleSave('watcher', v)} /> },
+          {
+            key: 'basic',
+            label: '基本设置',
+            children: (
+              <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                <NetworkConfig saving={saving} onSave={(v) => handleSave('network', v)} />
+                <TranslatorConfig saving={saving} onSave={(v) => handleSave('translator', v)} />
+                <CoverConfig saving={saving} onSave={(v) => handleSave('cover', v)} />
+              </Space>
+            ),
+          },
+          {
+            key: 'media',
+            label: '媒体库配置',
+            children: <MediaLibraryConfig />,
+          },
+          {
+            key: 'scraping',
+            label: '刮削设置',
+            children: (
+              <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                <ScannerConfig saving={saving} onSave={(v) => handleSave('scanner', v)} />
+                <CrawlerConfig saving={saving} onSave={(v) => handleSave('crawler', v)} />
+                <SummarizerConfig saving={saving} onSave={(v) => handleSave('summarizer', v)} />
+                <WatcherConfig saving={saving} onSave={(v) => handleSave('watcher', v)} />
+              </Space>
+            ),
+          },
         ]}
       />
     </div>

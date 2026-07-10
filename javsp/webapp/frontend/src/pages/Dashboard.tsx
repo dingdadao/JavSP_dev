@@ -4,12 +4,13 @@ import {
   PlayCircleOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
+  DatabaseOutlined,
   FolderOutlined,
   ThunderboltOutlined,
   VideoCameraOutlined,
 } from '@ant-design/icons'
 import { useSocket } from '../hooks/useSocket'
-import { fetchSystemInfo, fetchTasks, fetchLogs, fetchScrapeStatus } from '../api'
+import { fetchSystemInfo, fetchTasks, fetchLogs, fetchScrapeStatus, fetchMediaLibraries } from '../api'
 import dayjs from 'dayjs'
 
 export default function Dashboard() {
@@ -18,6 +19,7 @@ export default function Dashboard() {
   const [recentTasks, setRecentTasks] = useState<any[]>([])
   const [recentLogs, setRecentLogs] = useState<any[]>([])
   const [currentStatus, setCurrentStatus] = useState<any>(null)
+  const [defaultLib, setDefaultLib] = useState<any>(null)
 
   useEffect(() => {
     loadData()
@@ -45,14 +47,18 @@ export default function Dashboard() {
 
   const loadData = async () => {
     try {
-      const [sys, tasks, logs] = await Promise.all([
+      const [sys, tasks, logs, libs] = await Promise.all([
         fetchSystemInfo(),
         fetchTasks(5),
         fetchLogs(10),
+        fetchMediaLibraries(),
       ])
       setSysInfo(sys.data)
       setRecentTasks(tasks.data)
       setRecentLogs(logs.data)
+      const libList = libs.data || []
+      const def = libList.find((l: any) => l.is_default) || libList[0]
+      setDefaultLib(def || null)
     } catch (e) {
       console.error('加载数据失败', e)
     }
@@ -106,11 +112,16 @@ export default function Dashboard() {
         <Col xs={24} sm={12} lg={6}>
           <Card hoverable>
             <Statistic
-              title="监控路径"
-              value={sysInfo?.watch_paths_count || 0}
-              prefix={<FolderOutlined />}
-              valueStyle={{ color: '#f59e0b' }}
+              title="媒体库"
+              value={defaultLib ? defaultLib.name : '未配置'}
+              prefix={<DatabaseOutlined />}
+              valueStyle={{ color: '#f59e0b', fontSize: defaultLib ? 24 : 20 }}
             />
+            {defaultLib && (
+              <Typography.Text type="secondary" style={{ fontSize: 12 }} ellipsis>
+                {defaultLib.path}
+              </Typography.Text>
+            )}
           </Card>
         </Col>
       </Row>

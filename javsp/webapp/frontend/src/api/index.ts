@@ -151,3 +151,24 @@ export async function fetchCheckerLogs() {
   const { data } = await api.get('/checker/logs')
   return data
 }
+
+// ==================== 媒体库 ====================
+export async function fetchMediaLibraries() {
+  const { data } = await api.get('/media-libraries')
+  return data
+}
+
+export async function createMediaLibrary(params: { name: string; path: string; is_default?: boolean }) {
+  const { data } = await api.post('/media-libraries', params)
+  return data
+}
+
+export async function updateMediaLibrary(libId: number, params: { name?: string; path?: string; is_default?: boolean }) {
+  const { data } = await api.put(`/media-libraries/${libId}`, params)
+  return data
+}
+
+export async function deleteMediaLibrary(libId: number) {
+  const { data } = await api.delete(`/media-libraries/${libId}`)
+  return data
+}

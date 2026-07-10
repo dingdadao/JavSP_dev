@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react'
 import {
-  Card, Input, Button, Space, Switch, Typography, Form,
-  Alert, Progress, Tag, Steps, Result, Divider, Row, Col, App
+  Card, Button, Space, Switch, Typography, Form, Input,
+  Alert, Progress, Tag, Steps, Result, Row, Col, Select, App
 } from 'antd'
 import {
   PlayCircleOutlined, ScanOutlined, CheckCircleOutlined,
-  LoadingOutlined, FolderOutlined, RocketOutlined,
-  PauseCircleOutlined
+  LoadingOutlined, RocketOutlined, DatabaseOutlined,
+  PauseCircleOutlined, ThunderboltOutlined, SaveOutlined, FolderOpenOutlined
 } from '@ant-design/icons'
 import { useSocket } from '../hooks/useSocket'
-import { createScrapeTask, fetchConfig, fetchScrapeStatus, stopScrapeTask } from '../api'
+import { createScrapeTask, fetchConfig, fetchScrapeStatus, stopScrapeTask, fetchMediaLibraries, updateConfig } from '../api'
 
 export default function Scrape() {
   const { lastProgress, connected } = useSocket()
@@ -17,15 +17,15 @@ export default function Scrape() {
   const [loading, setLoading] = useState(false)
   const [taskId, setTaskId] = useState<string | null>(null)
   const [stopping, setStopping] = useState(false)
-  const [config, setConfig] = useState<any>({})
+  const [saving, setSaving] = useState(false)
+  const [libraries, setLibraries] = useState<any[]>([])
+  const [defaultLib, setDefaultLib] = useState<any>(null)
   const { message } = App.useApp()
 
-  // 系统永远只有一个任务，任何进度都直接显示
   const currentProgress = lastProgress?.status ? lastProgress : null
 
   useEffect(() => {
     loadConfig()
-    // 页面加载时检查是否有进行中的任务（刷新页面后 taskId 会丢失）
     checkRunningTask()
   }, [])
 
@@ -43,7 +43,6 @@ export default function Scrape() {
   const loadConfig = async () => {
     try {
       const { data } = await fetchConfig()
-      setConfig(data)
       const scanner = data?.scanner || {}
       const summarizer = data?.summarizer || {}
       form.setFieldsValue({
@@ -52,15 +51,54 @@ export default function Scrape() {
         translate: true,
         move_files: summarizer.move_files ?? true,
       })
+
+      // 加载媒体库列表
+      const libsRes = await fetchMediaLibraries()
+      const libList = libsRes.data || []
+      setLibraries(libList)
+      const def = libList.find((l: any) => l.is_default) || libList[0] || null
+      setDefaultLib(def)
+      if (def) {
+        form.setFieldsValue({ library: def.id })
+      }
     } catch (e) {
       console.error(e)
+    }
+  }
+
+  const handleSave = async (values: any) => {
+    setSaving(true)
+    try {
+      await updateConfig([
+        { group: 'scanner', key: 'input_directory', value: values.source || '' },
+        { group: 'summarizer', key: 'output_folder_pattern', value: values.dest || '' },
+      ])
+      message.success('路径已保存')
+    } catch (e: any) {
+      message.error(e.response?.data?.message || '保存失败')
+    } finally {
+      setSaving(false)
     }
   }
 
   const handleSubmit = async (values: any) => {
     setLoading(true)
     try {
-      const res = await createScrapeTask(values)
+      const selectedLib = libraries.find(l => l.id === values.library)
+      const params: any = {
+        translate: values.translate,
+        move_files: values.move_files,
+      }
+
+      if (selectedLib) {
+        params.source = selectedLib.path
+        params.dest = selectedLib.path
+      } else {
+        params.source = values.source
+        params.dest = values.dest
+      }
+
+      const res = await createScrapeTask(params)
       if (res.code === 0) {
         setTaskId(res.data.task_id)
         message.success(res.message)
@@ -93,7 +131,6 @@ export default function Scrape() {
   const isRunning = currentProgress?.status === 'running'
   const isDone = taskId && currentProgress && ['completed', 'partial', 'failed', 'error', 'stopped'].includes(currentProgress.status)
 
-  // 任务结束（无论完成、失败还是停止）后，重置 stopping 状态
   useEffect(() => {
     if (isDone) {
       setStopping(false)
@@ -101,6 +138,11 @@ export default function Scrape() {
   }, [isDone])
 
   const currentStep = isRunning ? 1 : isDone ? 2 : 0
+
+  const libOptions = libraries.map(lib => ({
+    label: `${lib.name} (${lib.path})`,
+    value: lib.id,
+  }))
 
   return (
     <div>
@@ -113,27 +155,53 @@ export default function Scrape() {
 
       <Row gutter={24}>
         <Col xs={24} lg={10}>
-          <Card title="刮削设置" variant="borderless">
+          <Card title="刮削设置" variant="borderless"
+            extra={
+              <Button
+                icon={<SaveOutlined />}
+                type="default"
+                loading={saving}
+                onClick={() => handleSave(form.getFieldsValue())}
+                disabled={isRunning}
+              >
+                保存
+              </Button>
+            }
+          >
             <Form
               form={form}
               layout="vertical"
               onFinish={handleSubmit}
               initialValues={{ translate: true, move_files: true }}
             >
+              {libraries.length > 0 && (
+                <Form.Item
+                  label={<Space><DatabaseOutlined />选择媒体库</Space>}
+                  name="library"
+                  extra="选择媒体库后将使用库路径，忽略下方手动路径"
+                >
+                  <Select
+                    options={libOptions}
+                    placeholder="选择媒体库（可选）"
+                    showSearch
+                    optionFilterProp="label"
+                    allowClear
+                  />
+                </Form.Item>
+              )}
+
               <Form.Item
-                label={<Space><FolderOutlined />{'源文件夹路径'}</Space>}
+                label={<Space><FolderOpenOutlined />源文件夹路径</Space>}
                 name="source"
                 rules={[{ required: true, message: '请输入源文件夹路径' }]}
-                extra="包含影片文件的目录，程序将自动扫描并识别番号"
               >
                 <Input placeholder="/path/to/movies" />
               </Form.Item>
 
               <Form.Item
-                label={<Space><FolderOutlined />{'输出文件夹路径'}</Space>}
+                label={<Space><FolderOpenOutlined />输出文件夹路径</Space>}
                 name="dest"
-                rules={[{ required: true, message: '请输入输出路径' }]}
-                extra="刮削结果(NFO, 封面等)将保存到此目录"
+                rules={[{ required: true, message: '请输入输出文件夹路径' }]}
               >
                 <Input placeholder="/path/to/output" />
               </Form.Item>
@@ -240,7 +308,7 @@ export default function Scrape() {
               <div style={{ textAlign: 'center', padding: '60px 0', color: 'rgba(255,255,255,0.25)' }}>
                 <PlayCircleOutlined style={{ fontSize: 64 }} />
                 <div style={{ marginTop: 16, fontSize: 16 }}>
-                  配置好路径后点击「开始刮削」启动任务
+                  配置路径后点击「开始刮削」启动任务
                 </div>
               </div>
             )}
