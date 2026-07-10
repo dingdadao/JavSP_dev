@@ -27,6 +27,7 @@ def run_scrape_task(task_id: str, source: str, dest: str,
     from javsp.file import scan_movies, replace_illegal_chars
     from javsp.nfo import write_nfo
     from javsp import __main__ as main_module
+    main_module.import_crawlers()
 
     def emit_progress(data):
         """推送实时进度到前端"""
