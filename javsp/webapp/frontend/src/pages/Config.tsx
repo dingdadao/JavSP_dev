@@ -175,10 +175,21 @@ function SummarizerConfig({ saving, onSave }: { saving: boolean; onSave: (v: any
         output_folder_pattern: s.output_folder_pattern || '',
         move_files: s.move_files ?? true,
         basename_pattern: s.basename_pattern || '{title}',
+        file_basename_pattern: s.file_basename_pattern || '',
         nfo_title_pattern: s.nfo_title_pattern || '{title}',
         checker_nfo_title_pattern: s.checker_nfo_title_pattern || '',
         checker_default_path: s.checker_default_path || '',
         fnos_compatible: s.fnos_compatible ?? false,
+        hard_link: s.hard_link ?? false,
+        length_maximum: s.length_maximum ?? 250,
+        max_actress_count: s.max_actress_count ?? 10,
+        remove_trailing_actor_name: s.remove_trailing_actor_name ?? true,
+        cover_basename: s.cover_basename || 'poster',
+        fanart_basename: s.fanart_basename || 'fanart',
+        nfo_basename: s.nfo_basename || '[{num}]',
+        extra_fanarts_enabled: s.extra_fanarts_enabled ?? true,
+        extra_fanarts_concurrent: s.extra_fanarts_concurrent ?? 3,
+        extra_fanarts_max: s.extra_fanarts_max ?? 6,
       })
     }).finally(() => setLoading(false))
   }, [])
@@ -218,6 +229,72 @@ function SummarizerConfig({ saving, onSave }: { saving: boolean; onSave: (v: any
             name="fnos_compatible" valuePropName="checked"
           >
             <Switch />
+          </Form.Item>
+          <Form.Item
+            label={<span>影片文件单独命名规则<Tip text="影片文件（mkv/mp4等）的独立命名规则，留空则使用上方的通用命名规则。支持变量如 {num}-{title}" /></span>}
+            name="file_basename_pattern"
+          >
+            <Input placeholder="留空则与通用命名规则相同" />
+          </Form.Item>
+          <Form.Item
+            label={<span>硬链接模式<Tip text="开启后使用硬链接代替移动/复制文件，不占用额外磁盘空间，但要求源和目标在同一分区" /></span>}
+            name="hard_link" valuePropName="checked"
+          >
+            <Switch />
+          </Form.Item>
+          <Form.Item
+            label={<span>最大文件路径长度<Tip text="允许的最长文件路径（字符数）。超过此长度的路径会被自动截短，避免系统限制导致文件无法保存" /></span>}
+            name="length_maximum"
+          >
+            <InputNumber min={100} max={500} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item
+            label={<span>最大女优数量<Tip text="路径中 {actress} 变量最多包含多少名女优。设为 1 表示只取第一女优名作为子文件夹" /></span>}
+            name="max_actress_count"
+          >
+            <InputNumber min={1} max={50} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item
+            label={<span>删除标题尾部女优名<Tip text="有些网站会在标题末尾附带女优名，开启后会自动删除，避免标题重复冗长" /></span>}
+            name="remove_trailing_actor_name" valuePropName="checked"
+          >
+            <Switch />
+          </Form.Item>
+          <Form.Item
+            label={<span>封面文件名<Tip text="封面图片的文件名（不含扩展名）。如 poster → poster.jpg" /></span>}
+            name="cover_basename"
+          >
+            <Input placeholder="poster" />
+          </Form.Item>
+          <Form.Item
+            label={<span>横版封面文件名<Tip text="横版封面图片的文件名（不含扩展名）。如 fanart → fanart.jpg" /></span>}
+            name="fanart_basename"
+          >
+            <Input placeholder="fanart" />
+          </Form.Item>
+          <Form.Item
+            label={<span>NFO 文件名<Tip text="NFO 文件的命名规则（不含扩展名）。支持变量，如 [{num}] → [ABCD-123].nfo" /></span>}
+            name="nfo_basename"
+          >
+            <Input placeholder="[{num}]" />
+          </Form.Item>
+          <Form.Item
+            label={<span>下载剧照<Tip text="是否下载剧照到 extrafanart 文件夹。Jellyfin/Emby 等媒体管理器会展示这些剧照" /></span>}
+            name="extra_fanarts_enabled" valuePropName="checked"
+          >
+            <Switch />
+          </Form.Item>
+          <Form.Item
+            label={<span>并发下载剧照数量<Tip text="同时下载几张剧照。增大可加快下载速度，但可能被站点限流" /></span>}
+            name="extra_fanarts_concurrent"
+          >
+            <InputNumber min={1} max={10} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item
+            label={<span>最大剧照数量<Tip text="最多下载几张剧照。设为 0 表示不限制，下载所有可用剧照" /></span>}
+            name="extra_fanarts_max"
+          >
+            <InputNumber min={0} max={20} style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item
             label={<span>检查器 NFO 标题格式<Tip text="命名检查器重新刮削时使用的 NFO 标题格式。留空则使用上方的全局 NFO 标题格式" /></span>}
@@ -442,6 +519,10 @@ function CrawlerConfig({ saving, onSave }: { saving: boolean; onSave: (group: st
         selection_fc2: c.selection_fc2 || [],
         hardworking: c.hardworking ?? true,
         sleep_after_scraping: c.sleep_after_scraping || 'PT1S',
+        required_keys: c.required_keys || ['cover', 'title'],
+        respect_site_avid: c.respect_site_avid ?? true,
+        use_javdb_cover: c.use_javdb_cover || 'fallback',
+        normalize_actress_name: c.normalize_actress_name ?? true,
         crawler_mirror: Object.entries(mirrors).map(([k, v]) => `${k}=${v}`).join('\n'),
       })
     }).finally(() => setLoading(false))
@@ -493,6 +574,40 @@ function CrawlerConfig({ saving, onSave }: { saving: boolean; onSave: (group: st
             name="sleep_after_scraping"
           >
             <Input placeholder="PT1S" />
+          </Form.Item>
+          <Form.Item
+            label={<span>必要字段<Tip text="爬虫至少要获取到哪些字段才算抓取成功。缺少这些字段的爬虫结果会被丢弃" /></span>}
+            name="required_keys"
+          >
+            <Select mode="multiple" options={[
+              { value: 'cover', label: '封面' },
+              { value: 'title', label: '标题' },
+              { value: 'actress', label: '女优' },
+              { value: 'genre', label: '标签' },
+              { value: 'studio', label: '片商' },
+            ]} placeholder="选择必要字段" />
+          </Form.Item>
+          <Form.Item
+            label={<span>尊重网页番号<Tip text="使用网页上显示的番号作为最终番号（会对大小写进行更正）。关闭则始终使用文件名解析的番号" /></span>}
+            name="respect_site_avid" valuePropName="checked"
+          >
+            <Switch />
+          </Form.Item>
+          <Form.Item
+            label={<span>使用 javdb 封面<Tip text="是否使用 javdb 站点的封面。yes=始终使用, no=不使用, fallback=其他爬虫没有封面时作为备选" /></span>}
+            name="use_javdb_cover"
+          >
+            <Select options={[
+              { value: 'fallback', label: '备选 (fallback)' },
+              { value: 'yes', label: '始终使用 (yes)' },
+              { value: 'no', label: '不使用 (no)' },
+            ]} />
+          </Form.Item>
+          <Form.Item
+            label={<span>统一女优艺名<Tip text="开启后会将同一个女优的多个艺名统一为一个名字。如「三上悠亚」和「三上悠亜」会被统一" /></span>}
+            name="normalize_actress_name" valuePropName="checked"
+          >
+            <Switch />
           </Form.Item>
           <Form.Item
             label={<span>爬虫镜像地址<Tip text="配置自建镜像或反向代理地址，配置后优先使用镜像而非直连站点。每行一个，格式：爬虫名=地址。如 javdb=https://mirror.example.com。留空或清空则不使用镜像" /></span>}

@@ -56,6 +56,14 @@ def apply_web_config():
         _override(cfg.crawler, 'hardworking', bool(crawler_cfg['hardworking']))
     if 'sleep_after_scraping' in crawler_cfg:
         _override(cfg.crawler, 'sleep_after_scraping', crawler_cfg['sleep_after_scraping'])
+    if 'required_keys' in crawler_cfg:
+        _override(cfg.crawler, 'required_keys', crawler_cfg['required_keys'] if isinstance(crawler_cfg['required_keys'], list) else json.loads(crawler_cfg['required_keys']))
+    if 'respect_site_avid' in crawler_cfg:
+        _override(cfg.crawler, 'respect_site_avid', bool(crawler_cfg['respect_site_avid']))
+    if 'use_javdb_cover' in crawler_cfg:
+        _override(cfg.crawler, 'use_javdb_cover', crawler_cfg['use_javdb_cover'])
+    if 'normalize_actress_name' in crawler_cfg:
+        _override(cfg.crawler, 'normalize_actress_name', bool(crawler_cfg['normalize_actress_name']))
 
     # 爬虫镜像地址
     network_cfg = db_config.get('network', {})
@@ -76,12 +84,40 @@ def apply_web_config():
         _override(cfg.summarizer.path, 'output_folder_pattern', summarizer_cfg['output_folder_pattern'])
     if 'basename_pattern' in summarizer_cfg and summarizer_cfg['basename_pattern']:
         _override(cfg.summarizer.path, 'basename_pattern', summarizer_cfg['basename_pattern'])
+    if 'file_basename_pattern' in summarizer_cfg and summarizer_cfg['file_basename_pattern']:
+        _override(cfg.summarizer.path, 'file_basename_pattern', summarizer_cfg['file_basename_pattern'])
     if 'nfo_title_pattern' in summarizer_cfg and summarizer_cfg['nfo_title_pattern']:
         _override(cfg.summarizer.nfo, 'title_pattern', summarizer_cfg['nfo_title_pattern'])
+    if 'nfo_basename' in summarizer_cfg and summarizer_cfg['nfo_basename']:
+        _override(cfg.summarizer.nfo, 'basename_pattern', summarizer_cfg['nfo_basename'])
     if 'fnos_compatible' in summarizer_cfg:
         _override(cfg.summarizer.nfo, 'fnos_compatible', bool(summarizer_cfg['fnos_compatible']))
     if 'move_files' in summarizer_cfg:
         _override(cfg.summarizer, 'move_files', bool(summarizer_cfg['move_files']))
+    if 'hard_link' in summarizer_cfg:
+        _override(cfg.summarizer.path, 'hard_link', bool(summarizer_cfg['hard_link']))
+    if 'length_maximum' in summarizer_cfg:
+        _override(cfg.summarizer.path, 'length_maximum', int(summarizer_cfg['length_maximum']))
+    if 'max_actress_count' in summarizer_cfg:
+        _override(cfg.summarizer.path, 'max_actress_count', int(summarizer_cfg['max_actress_count']))
+    if 'remove_trailing_actor_name' in summarizer_cfg:
+        _override(cfg.summarizer.title, 'remove_trailing_actor_name', bool(summarizer_cfg['remove_trailing_actor_name']))
+    if 'cover_basename' in summarizer_cfg and summarizer_cfg['cover_basename']:
+        _override(cfg.summarizer.cover, 'basename_pattern', summarizer_cfg['cover_basename'])
+    if 'fanart_basename' in summarizer_cfg and summarizer_cfg['fanart_basename']:
+        _override(cfg.summarizer.fanart, 'basename_pattern', summarizer_cfg['fanart_basename'])
+    if 'extra_fanarts_enabled' in summarizer_cfg:
+        _override(cfg.summarizer.extra_fanarts, 'enabled', bool(summarizer_cfg['extra_fanarts_enabled']))
+    if 'extra_fanarts_concurrent' in summarizer_cfg:
+        _override(cfg.summarizer.extra_fanarts, 'concurrent_downloads', int(summarizer_cfg['extra_fanarts_concurrent']))
+    if 'extra_fanarts_max' in summarizer_cfg:
+        _override(cfg.summarizer.extra_fanarts, 'max_download_count', int(summarizer_cfg['extra_fanarts_max']))
+    if 'censor_repr_0' in summarizer_cfg:
+        cfg.summarizer.censor_options_representation[0] = summarizer_cfg['censor_repr_0']
+    if 'censor_repr_1' in summarizer_cfg:
+        cfg.summarizer.censor_options_representation[1] = summarizer_cfg['censor_repr_1']
+    if 'censor_repr_2' in summarizer_cfg:
+        cfg.summarizer.censor_options_representation[2] = summarizer_cfg['censor_repr_2']
 
     # 封面设置
     cover_cfg = db_config.get('cover', {})
