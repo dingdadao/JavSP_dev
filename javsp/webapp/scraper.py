@@ -245,6 +245,46 @@ def _scrape_single(movie, translate: bool, dest_path: str, move_files: bool, mai
         os.makedirs(movie_save_dir, exist_ok=True)
         movie.save_dir = movie_save_dir
 
+        # 下载封面图片
+        try:
+            cfg = Cfg()
+            big_covers = movie.info.big_covers if cfg.summarizer.cover.highres else None
+            cover_dl = main_module.download_cover(movie.info.covers, movie.fanart_file, big_covers)
+            if cover_dl is None:
+                logger.warning(f"封面下载失败: {movie.dvdid or movie.cid}")
+            else:
+                cover, pic_path = cover_dl
+                if cover != movie.info.cover:
+                    movie.info.cover = cover
+                if pic_path != movie.fanart_file:
+                    movie.fanart_file = pic_path
+                    actual_ext = os.path.splitext(pic_path)[1]
+                    movie.poster_file = os.path.splitext(movie.poster_file)[0] + actual_ext
+                main_module.process_poster(movie)
+        except Exception as e:
+            logger.warning(f"封面处理异常 {movie.dvdid}: {e}")
+
+        # 下载剧照
+        cfg = Cfg()
+        if cfg.summarizer.extra_fanarts.enabled and getattr(movie.info, 'preview_pics', None):
+            try:
+                extrafanartdir = movie.save_dir + '/extrafanart'
+                os.makedirs(extrafanartdir, exist_ok=True)
+                concurrent = cfg.summarizer.extra_fanarts.concurrent_downloads
+                if concurrent > 0:
+                    main_module.download_extrafanart_concurrent(movie, extrafanartdir, None)
+                else:
+                    max_count = cfg.summarizer.extra_fanarts.max_download_count
+                    pics = movie.info.preview_pics[:max_count] if max_count > 0 else movie.info.preview_pics
+                    for id, pic_url in enumerate(pics):
+                        fanart_dest = f"{extrafanartdir}/{id}.png"
+                        try:
+                            main_module.download(pic_url, fanart_dest)
+                        except Exception as e:
+                            logger.warning(f"剧照下载失败 {pic_url}: {e}")
+            except Exception as e:
+                logger.warning(f"剧照处理异常 {movie.dvdid}: {e}")
+
         # 保存 NFO
         nfo_path = os.path.join(movie_save_dir, f"{movie.dvdid or movie.cid}.nfo")
         write_nfo(movie.info, nfo_path)
