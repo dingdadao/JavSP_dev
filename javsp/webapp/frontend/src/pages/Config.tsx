@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import {
   Card, Form, Input, Button, Switch, Select, InputNumber,
   Typography, Tabs, Space, Spin, Tag, Tooltip, Alert, Table, Modal, App
@@ -622,16 +622,17 @@ function TranslatorConfig({ saving, onSave }: { saving: boolean; onSave: (v: any
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(true)
   const [engine, setEngine] = useState('')
+  const translatorDataRef = useRef<any>(null)
 
   useEffect(() => {
     fetchConfig('translator').then(({ data }) => {
       const t = data?.translator || {}
+      translatorDataRef.current = t
       const eng = t.engine || ''
       setEngine(eng)
+      // 先设置非条件渲染的字段
       form.setFieldsValue({
         engine: eng,
-        translate_title: t.translate_title ?? true,
-        translate_plot: t.translate_plot ?? true,
         baidu_app_id: t.baidu_app_id || '',
         bing_api_key: t.bing_api_key || '',
         api_url: t.api_url || '',
@@ -640,6 +641,17 @@ function TranslatorConfig({ saving, onSave }: { saving: boolean; onSave: (v: any
       })
     }).finally(() => setLoading(false))
   }, [])
+
+  // engine 变化后，条件渲染的字段挂载，再设置值
+  useEffect(() => {
+    if (translatorDataRef.current && !loading) {
+      const t = translatorDataRef.current
+      form.setFieldsValue({
+        translate_title: t.translate_title ?? true,
+        translate_plot: t.translate_plot ?? true,
+      })
+    }
+  }, [engine, loading])
 
   const handleEngineChange = (val: string) => {
     setEngine(val)
