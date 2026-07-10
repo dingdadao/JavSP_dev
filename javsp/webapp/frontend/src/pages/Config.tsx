@@ -91,11 +91,13 @@ function NetworkConfig({ saving, onSave }: { saving: boolean; onSave: (v: any) =
   useEffect(() => {
     fetchConfig('network').then(({ data }) => {
       const n = data?.network || {}
+      const mirrors = n.crawler_mirror || {}
       form.setFieldsValue({
         proxy_server: n.proxy_server || '',
         retry: n.retry ?? 3,
         timeout: n.timeout || 'PT10S',
         ssl_verification: n.ssl_verification ?? true,
+        crawler_mirror: Object.entries(mirrors).map(([k, v]) => `${k}=${v}`).join('\n'),
       })
     }).finally(() => setLoading(false))
   }, [])
@@ -105,7 +107,21 @@ function NetworkConfig({ saving, onSave }: { saving: boolean; onSave: (v: any) =
       <Button icon={<SaveOutlined />} type="primary" loading={saving} onClick={() => form.submit()}>保存</Button>
     }>
       <Spin spinning={loading}>
-        <Form form={form} layout="vertical" onFinish={onSave}>
+        <Form form={form} layout="vertical" onFinish={(values) => {
+          // 解析镜像地址
+          const mirrors: Record<string, string> = {}
+          if (values.crawler_mirror) {
+            for (const line of values.crawler_mirror.split('\n')) {
+              const trimmed = line.trim()
+              if (!trimmed || trimmed.startsWith('#')) continue
+              const idx = trimmed.indexOf('=')
+              if (idx > 0) {
+                mirrors[trimmed.slice(0, idx).trim()] = trimmed.slice(idx + 1).trim()
+              }
+            }
+          }
+          onSave({ ...values, crawler_mirror: mirrors })
+        }}>
           <Form.Item label="代理服务器" name="proxy_server" extra="支持 http, socks5 代理，留空禁用">
             <Input placeholder="http://127.0.0.1:1080" />
           </Form.Item>
@@ -117,6 +133,12 @@ function NetworkConfig({ saving, onSave }: { saving: boolean; onSave: (v: any) =
           </Form.Item>
           <Form.Item label="SSL证书验证" name="ssl_verification" valuePropName="checked">
             <Switch />
+          </Form.Item>
+          <Form.Item label="爬虫镜像地址" name="crawler_mirror" extra="每行一个，格式: 爬虫名=镜像地址 (如 javdb=https://mirror.example.com)，配置后优先使用镜像地址">
+            <Input.TextArea
+              placeholder={"javdb=https://your-mirror.example.com/javdb\njavbus=https://your-mirror.example.com/javbus"}
+              rows={4}
+            />
           </Form.Item>
         </Form>
       </Spin>
