@@ -35,6 +35,34 @@ def is_stop_requested() -> bool:
     return _stop_event.is_set()
 
 
+def apply_web_config():
+    """从数据库读取 Web 配置，覆盖 Cfg() 中对应的值"""
+    from javsp.config import Cfg, CrawlerID
+    cfg = Cfg()
+    db_config = get_config()
+
+    # 爬虫列表
+    crawler_cfg = db_config.get('crawler', {})
+    if 'selection_normal' in crawler_cfg:
+        cfg.crawler.selection.normal = [CrawlerID(c) for c in crawler_cfg['selection_normal']]
+    if 'selection_fc2' in crawler_cfg:
+        cfg.crawler.selection.fc2 = [CrawlerID(c) for c in crawler_cfg['selection_fc2']]
+
+    # 爬虫镜像地址
+    network_cfg = db_config.get('network', {})
+    if 'crawler_mirror' in network_cfg and isinstance(network_cfg['crawler_mirror'], dict):
+        cfg.network.crawler_mirror = {CrawlerID(k): v for k, v in network_cfg['crawler_mirror'].items()}
+
+    # 翻译设置
+    translator_cfg = db_config.get('translator', {})
+    if 'engine' in translator_cfg:
+        engine_name = translator_cfg['engine']
+        if not engine_name:
+            cfg.translator.engine = None
+
+    logger.debug(f"Web 配置已应用: 爬虫列表={[c.value for c in cfg.crawler.selection.normal]}")
+
+
 def run_scrape_task(task_id: str, source: str, dest: str,
                     translate: bool, move_files: bool, socketio):
     """异步执行刮削任务，通过 SocketIO 实时推送进度"""
@@ -44,6 +72,8 @@ def run_scrape_task(task_id: str, source: str, dest: str,
     from javsp.file import scan_movies, replace_illegal_chars
     from javsp.nfo import write_nfo
     from javsp import __main__ as main_module
+    # 应用 Web 配置覆盖 Cfg()
+    apply_web_config()
     main_module.import_crawlers()
 
     def emit_progress(data):

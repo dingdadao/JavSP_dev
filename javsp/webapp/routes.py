@@ -161,7 +161,7 @@ def register_routes(app, socketio: SocketIO):
         try:
             with _current_task_lock:
                 if not _current_task_thread or not _current_task_thread.is_alive():
-                    return jsonify({'code': 404, 'message': '当前无运行中的任务'}), 404
+                    return jsonify({'code': 0, 'message': '当前无运行中的任务'})
             request_stop()
             add_log('INFO', 'scraper', '请求停止刮削任务')
             return jsonify({'code': 0, 'message': '已发送停止信号'})
