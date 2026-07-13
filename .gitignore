@@ -140,5 +140,10 @@ test
 ./config.yml
 .skipped
 
+# Runtime data
+*.db
+.javsp_task_history.json
+.check8
+
 # Node
 node_modules/
