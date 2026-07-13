@@ -54,6 +54,7 @@ def apply_web_config():
         _override(cfg.crawler.selection, 'fc2', [CrawlerID(c) for c in crawler_cfg['selection_fc2']])
     if 'hardworking' in crawler_cfg:
         _override(cfg.crawler, 'hardworking', bool(crawler_cfg['hardworking']))
+
     if 'sleep_after_scraping' in crawler_cfg:
         import pendulum
         val = crawler_cfg['sleep_after_scraping']
@@ -94,7 +95,7 @@ def apply_web_config():
         _override(cfg.summarizer.path, 'output_folder_pattern', summarizer_cfg['output_folder_pattern'])
     if 'basename_pattern' in summarizer_cfg and summarizer_cfg['basename_pattern']:
         _override(cfg.summarizer.path, 'basename_pattern', summarizer_cfg['basename_pattern'])
-    if 'file_basename_pattern' in summarizer_cfg and summarizer_cfg['file_basename_pattern']:
+    if 'file_basename_pattern' in summarizer_cfg:
         _override(cfg.summarizer.path, 'file_basename_pattern', summarizer_cfg['file_basename_pattern'])
     if 'nfo_title_pattern' in summarizer_cfg and summarizer_cfg['nfo_title_pattern']:
         _override(cfg.summarizer.nfo, 'title_pattern', summarizer_cfg['nfo_title_pattern'])
@@ -154,7 +155,7 @@ def run_scrape_task(task_id: str, source: str, dest: str,
     from javsp.datatype import Movie, MovieInfo
     from javsp.web.base import close_global_session
     from javsp.web.translate import translate_movie_info
-    from javsp.file import scan_movies, replace_illegal_chars
+    from javsp.file import scan_movies, replace_illegal_chars, get_failed_when_scan
     from javsp.nfo import write_nfo
     from javsp import __main__ as main_module
     # 应用 Web 配置覆盖 Cfg()
@@ -175,7 +176,14 @@ def run_scrape_task(task_id: str, source: str, dest: str,
         emit_progress({'task_id': task_id, 'status': 'scanning', 'message': '正在扫描影片文件...'})
         movies = scan_movies(source)
 
-        if not movies:
+        # 获取扫描过程中无法识别番号的影片
+        unrecognized_items = get_failed_when_scan()
+        unrecognized_paths = []
+        for item in (unrecognized_items or []):
+            unrecognized_paths.extend(item.files or [])
+        unrecognized_count = len(unrecognized_paths)
+
+        if not movies and unrecognized_count == 0:
             update_task(task_id, status='failed', finished_at=time.strftime('%Y-%m-%d %H:%M:%S'))
             emit_progress({'task_id': task_id, 'status': 'failed', 'message': '未找到影片文件'})
             add_log('WARNING', 'scraper', f'任务 {task_id[:8]}: 未找到影片文件')
@@ -183,19 +191,24 @@ def run_scrape_task(task_id: str, source: str, dest: str,
 
         total = len(movies)
         update_task(task_id, status='running', completed=0)
-        # 这里需要更新 total（create_task 时传的是 0，现在知道了实际数量）
         from javsp.webapp.database import get_db
         with get_db() as conn:
             conn.execute("UPDATE tasks SET total = ? WHERE id = ?", (total, task_id))
 
-        add_log('INFO', 'scraper', f'任务 {task_id[:8]}: 找到 {total} 部影片')
+        add_log('INFO', 'scraper', f'任务 {task_id[:8]}: 找到 {total} 部影片' +
+                (f'，{unrecognized_count} 个未识别番号' if unrecognized_count else ''))
         emit_progress({
             'task_id': task_id, 'status': 'running',
-            'total': total, 'completed': 0, 'message': f'找到 {total} 部影片，开始刮削...'
+            'total': total, 'completed': 0,
+            'unrecognized': unrecognized_count,
+            'message': f'找到 {total} 部影片，开始刮削...'
         })
 
         success_count = 0
         failed_count = 0
+        # 收集每项结果用于最终摘要
+        results_success = []
+        results_failed = []
 
         for idx, movie in enumerate(movies):
             # 检查是否收到停止信号
@@ -206,6 +219,10 @@ def run_scrape_task(task_id: str, source: str, dest: str,
                     'task_id': task_id, 'status': 'stopped',
                     'total': total, 'completed': idx,
                     'success': success_count, 'failed': failed_count,
+                    'unrecognized': unrecognized_count,
+                    'results_success': results_success,
+                    'results_failed': results_failed,
+                    'results_unrecognized': unrecognized_paths,
                     'message': f'任务已停止: 已完成 {idx}/{total}'
                 })
                 add_log('INFO', 'scraper', f'任务 {task_id[:8]}: 用户停止，已完成 {idx}/{total}')
@@ -227,16 +244,31 @@ def run_scrape_task(task_id: str, source: str, dest: str,
                     update_task_item(item_id, status='success', dest_path=result['dest_path'],
                                      scraped_data=result.get('data'), finished_at=time.strftime('%Y-%m-%d %H:%M:%S'))
                     success_count += 1
+                    results_success.append({
+                        'dvdid': dvdid,
+                        'source': movie.files[0] if movie.files else '',
+                        'dest_path': result['dest_path'],
+                    })
                 else:
                     update_task_item(item_id, status='failed', message=result['message'],
                                      finished_at=time.strftime('%Y-%m-%d %H:%M:%S'))
                     failed_count += 1
+                    results_failed.append({
+                        'dvdid': dvdid,
+                        'source': movie.files[0] if movie.files else '',
+                        'message': result['message'],
+                    })
 
             except Exception as e:
                 logger.exception(f"刮削 {dvdid} 异常")
                 update_task_item(item_id, status='failed', message=str(e),
                                  finished_at=time.strftime('%Y-%m-%d %H:%M:%S'))
                 failed_count += 1
+                results_failed.append({
+                    'dvdid': dvdid,
+                    'source': movie.files[0] if movie.files else '',
+                    'message': str(e),
+                })
 
             completed = idx + 1
             update_task(task_id, completed=completed, success_count=success_count, failed_count=failed_count)
@@ -244,23 +276,30 @@ def run_scrape_task(task_id: str, source: str, dest: str,
                 'task_id': task_id, 'status': 'running',
                 'total': total, 'completed': completed,
                 'success': success_count, 'failed': failed_count,
+                'unrecognized': unrecognized_count,
                 'current': dvdid,
                 'message': f'进度: {completed}/{total} (成功:{success_count} 失败:{failed_count})'
             })
 
-        # 标记任务完成
-        final_status = 'completed' if failed_count == 0 else ('partial' if success_count > 0 else 'failed')
+        # 标记任务完成：有失败项即为 failed，全部成功才是 completed
+        final_status = 'completed' if failed_count == 0 else 'failed'
         update_task(task_id, status=final_status, finished_at=time.strftime('%Y-%m-%d %H:%M:%S'))
 
         emit_progress({
             'task_id': task_id, 'status': final_status,
             'total': total, 'completed': total,
             'success': success_count, 'failed': failed_count,
-            'message': f'任务完成: 成功 {success_count}/{total}, 失败 {failed_count}/{total}'
+            'unrecognized': unrecognized_count,
+            'results_success': results_success,
+            'results_failed': results_failed,
+            'results_unrecognized': unrecognized_paths,
+            'message': f'任务完成: 成功 {success_count}/{total}, 失败 {failed_count}/{total}' +
+                       (f', 未识别番号 {unrecognized_count}' if unrecognized_count else '')
         })
 
         add_log('INFO', 'scraper',
-                f'任务 {task_id[:8]} 完成: 成功 {success_count}, 失败 {failed_count}')
+                f'任务 {task_id[:8]} 完成: 成功 {success_count}, 失败 {failed_count}' +
+                (f', 未识别 {unrecognized_count}' if unrecognized_count else ''))
 
         # 清理全局会话
         try:

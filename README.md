@@ -2,6 +2,8 @@
 
 **AV 元数据刮削器 & Web 管理界面**
 
+本项目 fork 自 [Yuukiy/JavSP](https://github.com/Yuukiy/JavSP)，在其原有命令行刮削器基础上进行二次开发，新增了 Web 管理界面、文件监控、命名检查、媒体库管理等功能。保留并扩展了自动识别番号、多站点数据汇总、NFO 生成、封面下载、翻译等核心能力。
+
 自动识别影片番号、抓取并汇总多个站点的 AV 元数据，根据指定规则分类整理影片文件，并为 Emby、Jellyfin、Kodi 等媒体管理软件生成 NFO 元数据文件。内置 Web 管理界面，通过浏览器即可完成配置、刮削、监控等全部操作。
 
 ## 功能特点
@@ -30,13 +32,6 @@ cd jav-manager
 
 启动后访问 `http://localhost:5001` 即可使用 Web 管理界面。
 
-### 命令行模式
-
-```bash
-poetry install
-poetry run javsp
-```
-
 ## 部署脚本
 
 `deploy.sh` 自动检测并安装缺失的系统依赖（Python、Poetry、Node.js），兼容 macOS 和 Linux。
@@ -61,15 +56,17 @@ JAVSP_HOST=127.0.0.1 JAVSP_PORT=8080 ./deploy.sh start
 | 页面 | 功能 |
 |------|------|
 | 仪表盘 | 系统统计、实时刮削进度、最近任务、操作日志 |
-| 开始刮削 | 配置源/目标路径，一键启动刮削任务，实时进度条 |
+| 开始刮削 | 选择媒体库或手动路径，一键启动刮削任务，实时显示成功/失败/未识别番号统计 |
 | 任务列表 | 查看所有历史任务，每部影片的刮削结果详情 |
+| 命名检查 | 扫描媒体库，检查命名是否符合规则，支持批量修复/重新刮削 |
 | 配置管理 | 可视化编辑全部配置项（扫描/网络/爬虫/整理/翻译/封面/监控） |
 | 文件监控 | 管理监控路径，检测到新文件自动触发刮削 |
+| 媒体库 | 管理多个媒体库路径，设置默认库 |
 | 操作日志 | 按级别筛选查看系统日志 |
 
 ## 命名规则
 
-配置文件中 `summarizer.path` 下的 `output_folder_pattern`、`basename_pattern` 支持使用变量：
+在 Web 管理界面的「配置管理 → 整理与命名」中可以设置影片文件、文件夹、NFO、封面的命名规则。支持以下变量：
 
 | 变量 | 含义 | 备注 |
 |------|------|------|
@@ -86,13 +83,6 @@ JAVSP_HOST=127.0.0.1 JAVSP_PORT=8080 ./deploy.sh start
 | `{publisher}` | 发行商 | |
 | `{date}` | 发行日期 | 例如 2020-05-20 |
 | `{year}` | 发行年份 | |
-
-示例：
-
-```yaml
-output_folder_pattern: "/path/to/output/{censor}/{actress}/{num}"
-basename_pattern: "{title}"
-```
 
 > 使用 NFO 时，不建议在文件名中添加 `{title}`，可能影响媒体管理软件兼容性。Linux 文件系统对长路径支持有限。
 
@@ -133,7 +123,7 @@ server {
 ```
 jav-manager/
 ├── javsp/
-│   ├── __main__.py          # 命令行入口
+│   ├── __main__.py          # 命令行入口（当前版本主要使用 Web 模式）
 │   ├── config.py            # 配置管理
 │   ├── datatype.py          # 数据类型定义
 │   ├── web/                 # 各站点爬虫
@@ -145,7 +135,7 @@ jav-manager/
 │       ├── routes.py        # API 路由
 │       ├── scraper.py       # 刮削执行器
 │       ├── watcher.py       # 文件监控
-│       ├── server.py        # 启动入口
+│       ├── server.py        # Web 启动入口
 │       └── frontend/        # React 前端
 │           └── src/
 │               ├── pages/   # 页面组件

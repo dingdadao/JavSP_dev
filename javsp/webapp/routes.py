@@ -301,7 +301,7 @@ def register_routes(app, socketio: SocketIO):
             with sqlite3.connect(DB_PATH) as conn:
                 task_count = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
                 success_count = conn.execute("SELECT COUNT(*) FROM tasks WHERE status = 'completed'").fetchone()[0]
-                failed_count = conn.execute("SELECT COUNT(*) FROM tasks WHERE status = 'failed'").fetchone()[0]
+                failed_count = conn.execute("SELECT COUNT(*) FROM tasks WHERE status IN ('failed', 'stopped', 'error')").fetchone()[0]
 
             watch_paths = get_watch_paths(enabled_only=False)
 
