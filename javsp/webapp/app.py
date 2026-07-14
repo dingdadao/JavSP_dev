@@ -7,7 +7,7 @@ from flask import Flask, send_from_directory, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO
 
-from javsp.webapp.database import init_db, seed_default_config, DB_PATH
+from javsp.webapp.database import init_db, seed_default_config, migrate_config, DB_PATH
 
 logger = logging.getLogger('javsp.webapp')
 
@@ -26,6 +26,7 @@ def create_app():
     # 初始化数据库
     init_db()
     seed_default_config()
+    migrate_config()
 
     # 注册 API 蓝图
     from javsp.webapp.routes import register_routes

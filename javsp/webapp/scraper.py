@@ -7,6 +7,7 @@ import time
 import shutil
 import logging
 import threading
+import subprocess
 from pathlib import Path
 from typing import List
 
@@ -160,6 +161,7 @@ def run_scrape_task(task_id: str, source: str, dest: str,
     from javsp import __main__ as main_module
     # 应用 Web 配置覆盖 Cfg()
     apply_web_config()
+    main_module.load_actress_alias()
     main_module.import_crawlers()
 
     def emit_progress(data):
@@ -209,6 +211,7 @@ def run_scrape_task(task_id: str, source: str, dest: str,
         # 收集每项结果用于最终摘要
         results_success = []
         results_failed = []
+        db_config = get_config()
 
         for idx, movie in enumerate(movies):
             # 检查是否收到停止信号
@@ -230,6 +233,33 @@ def run_scrape_task(task_id: str, source: str, dest: str,
 
             dvdid = movie.dvdid or movie.cid or f'unknown_{idx}'
             item_id = add_task_item(task_id, dvdid, movie.files[0] if movie.files else '')
+
+            # ffmpeg 完整性检查
+            db_cfg = db_config.get('scanner', {})
+            if db_cfg.get('check_file_integrity', True):
+                integrity_ok = True
+                for f in movie.files:
+                    is_valid, error_msg = _check_file_integrity(f)
+                    if not is_valid:
+                        logger.error(f'文件不完整，跳过刮削: {os.path.basename(f)} - {error_msg}')
+                        update_task_item(item_id, status='skipped',
+                                         message=f'文件不完整: {error_msg}',
+                                         finished_at=time.strftime('%Y-%m-%d %H:%M:%S'))
+                        add_log('WARNING', 'scraper',
+                                f'任务 {task_id[:8]}: 文件不完整跳过 {dvdid}: {error_msg}')
+                        integrity_ok = False
+                        break
+                if not integrity_ok:
+                    completed = idx + 1
+                    update_task(task_id, completed=completed, failed_count=failed_count + 1)
+                    emit_progress({
+                        'task_id': task_id, 'status': 'running',
+                        'total': total, 'completed': completed,
+                        'success': success_count, 'failed': failed_count + 1,
+                        'current': dvdid, 'message': f'文件不完整跳过: {dvdid}'
+                    })
+                    failed_count += 1
+                    continue
 
             emit_progress({
                 'task_id': task_id, 'status': 'running',
@@ -312,6 +342,26 @@ def run_scrape_task(task_id: str, source: str, dest: str,
         update_task(task_id, status='error', finished_at=time.strftime('%Y-%m-%d %H:%M:%S'))
         emit_progress({'task_id': task_id, 'status': 'error', 'message': f'任务异常: {str(e)}'})
         add_log('ERROR', 'scraper', f'任务 {task_id[:8]} 异常: {str(e)}')
+
+
+def _check_file_integrity(filepath: str) -> tuple[bool, str]:
+    """使用 ffmpeg 检查视频文件完整性"""
+    try:
+        result = subprocess.run(
+            ['ffmpeg', '-v', 'error', '-i', filepath, '-f', 'null', '-'],
+            capture_output=True, text=True, timeout=300
+        )
+        if result.returncode != 0 or result.stderr.strip():
+            error_msg = result.stderr.strip() or f'ffmpeg 返回码: {result.returncode}'
+            return False, error_msg
+        return True, ''
+    except FileNotFoundError:
+        logger.warning('ffmpeg 未安装，跳过文件完整性检查')
+        return True, ''
+    except subprocess.TimeoutExpired:
+        return False, 'ffmpeg 检查超时'
+    except Exception as e:
+        return False, f'ffmpeg 检查异常: {e}'
 
 
 def _scrape_single(movie, translate: bool, dest_path: str, move_files: bool, main_module) -> dict:

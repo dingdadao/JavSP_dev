@@ -92,6 +92,11 @@ export async function fetchLogs(limit = 100, level?: string) {
   return data
 }
 
+export async function fetchAppLogs(params: { level?: string; search?: string; limit?: number; offset?: number }) {
+  const { data } = await api.get('/app-logs', { params })
+  return data
+}
+
 export async function fetchSystemInfo() {
   const { data } = await api.get('/system/info')
   return data
@@ -152,6 +157,41 @@ export async function fetchCheckerLogs() {
   return data
 }
 
+export async function fetchCheckerIntegrity(params: { path: string }) {
+  const { data } = await api.post('/checker/integrity', params)
+  return data
+}
+
+export async function resumeCheckerIntegrity(task_id: string) {
+  const { data } = await api.post('/checker/integrity/resume', { task_id })
+  return data
+}
+
+export async function stopCheckerIntegrity(task_id: string) {
+  const { data } = await api.post('/checker/integrity/stop', { task_id })
+  return data
+}
+
+export async function fetchCheckerIntegrityTasks() {
+  const { data } = await api.get('/checker/integrity/tasks')
+  return data
+}
+
+export async function fetchCheckerIntegrityTaskDetail(taskId: string) {
+  const { data } = await api.get(`/checker/integrity/tasks/${encodeURIComponent(taskId)}`)
+  return data
+}
+
+export async function deleteCheckerIntegrityVideos(video_paths: string[], item_ids: number[]) {
+  const { data } = await api.post('/checker/integrity/delete', { video_paths, item_ids })
+  return data
+}
+
+export async function deleteCheckerIntegrityTask(task_id: string) {
+  const { data } = await api.post('/checker/integrity/task/delete', { task_id })
+  return data
+}
+
 // ==================== 媒体库 ====================
 export async function fetchMediaLibraries() {
   const { data } = await api.get('/media-libraries')
@@ -170,5 +210,71 @@ export async function updateMediaLibrary(libId: number, params: { name?: string;
 
 export async function deleteMediaLibrary(libId: number) {
   const { data } = await api.delete(`/media-libraries/${libId}`)
+  return data
+}
+
+// ==================== 字幕生成 ====================
+export async function fetchSubtitlePlatform() {
+  const { data } = await api.get('/subtitle/platform')
+  return data
+}
+
+export async function scanSubtitleMedia(path: string) {
+  const { data } = await api.post('/subtitle/scan', { path })
+  return data
+}
+
+export async function fetchSubtitleScanResults(path: string) {
+  const { data } = await api.get('/subtitle/scan_results', { params: { path } })
+  return data
+}
+
+export async function startSubtitleTask(params: { path: string; name?: string; files?: any[] }) {
+  const { data } = await api.post('/subtitle/start', params)
+  return data
+}
+
+export async function stopSubtitleTask(task_id: string) {
+  const { data } = await api.post('/subtitle/stop', { task_id })
+  return data
+}
+
+export async function generateSubtitle(task_id: string) {
+  const { data } = await api.post('/subtitle/generate', { task_id })
+  return data
+}
+
+export async function generateSubtitleForVideo(task_id: string, video_path: string) {
+  const { data } = await api.post('/subtitle/generate_video', { task_id, video_path })
+  return data
+}
+
+export async function fetchSubtitleTasks() {
+  const { data } = await api.get('/subtitle/tasks')
+  return data
+}
+
+export async function fetchSubtitleTaskDetail(taskId: string) {
+  const { data } = await api.get(`/subtitle/tasks/${encodeURIComponent(taskId)}`)
+  return data
+}
+
+export async function deleteSubtitleTask(task_id: string) {
+  const { data } = await api.post('/subtitle/task/delete', { task_id })
+  return data
+}
+
+export async function regenerateSubtitle(item_ids: number[]) {
+  const { data } = await api.post('/subtitle/regenerate', { item_ids })
+  return data
+}
+
+export async function deleteSubtitleAudio(item_ids: number[]) {
+  const { data } = await api.post('/subtitle/delete-audio', { item_ids })
+  return data
+}
+
+export async function fetchSubtitleAudioTracks(path: string) {
+  const { data } = await api.get('/subtitle/audio-tracks', { params: { path } })
   return data
 }

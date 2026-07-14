@@ -77,17 +77,15 @@ def translate_movie_info(info: MovieInfo):
     return True
 
 
-def translate(texts, engine: Union[
-    BaiduTranslateEngine,
-    BingTranslateEngine,
-    ClaudeTranslateEngine,
-    OpenAITranslateEngine,
-    LocalAITranslateEngine,
-    GoogleAITranslateEngine,
-    None
-], actress=[]):
+def translate(texts, engine=None, config=None, actress=[]):
     """
     翻译入口：对错误进行处理并且统一返回格式
+
+    Args:
+        texts: 要翻译的文本
+        engine: 引擎对象或引擎名称字符串 (baidu/bing/claude/openai/localai/google/googleai)
+        config: 引擎配置字典（当engine为字符串时使用）
+        actress: 演员列表
 
     Returns:
         dict: 翻译正常: {'trans': '译文', 'orig_break':['原句1', ...], 'trans_break': ['译句1', ...]}
@@ -96,6 +94,70 @@ def translate(texts, engine: Union[
     """
     rtn = {}
     err_msg = ''
+    
+    if isinstance(engine, str):
+        engine_name = engine
+        engine_config = config or {}
+        if engine_name == 'baidu':
+            engine = BaiduTranslateEngine(
+                name='baidu',
+                app_id=engine_config.get('app_id', ''),
+                api_key=engine_config.get('api_key', ''),
+                max_retry=engine_config.get('max_retry', 3),
+                retry_delay=engine_config.get('retry_delay', 1)
+            )
+        elif engine_name == 'bing':
+            engine = BingTranslateEngine(
+                name='bing',
+                api_key=engine_config.get('api_key', ''),
+                max_retry=engine_config.get('max_retry', 3),
+                retry_delay=engine_config.get('retry_delay', 1)
+            )
+        elif engine_name == 'claude':
+            engine = ClaudeTranslateEngine(
+                name='claude',
+                api_key=engine_config.get('api_key', ''),
+                max_retry=engine_config.get('max_retry', 3),
+                retry_delay=engine_config.get('retry_delay', 1)
+            )
+        elif engine_name == 'openai':
+            engine = OpenAITranslateEngine(
+                name='openai',
+                url=engine_config.get('api_url', ''),
+                api_key=engine_config.get('api_key', ''),
+                model=engine_config.get('model', ''),
+                max_retry=engine_config.get('max_retry', 3),
+                retry_delay=engine_config.get('retry_delay', 1)
+            )
+        elif engine_name == 'localai':
+            engine = LocalAITranslateEngine(
+                name='localai',
+                url=engine_config.get('api_url', ''),
+                api_key=engine_config.get('api_key', ''),
+                model=engine_config.get('model', ''),
+                context_window=engine_config.get('context_window', 2048),
+                max_retry=engine_config.get('max_retry', 3),
+                retry_delay=engine_config.get('retry_delay', 1)
+            )
+        elif engine_name == 'google':
+            engine = GoogleTranslateEngine(
+                name='google',
+                max_retry=engine_config.get('max_retry', 3),
+                retry_delay=engine_config.get('retry_delay', 1)
+            )
+        elif engine_name == 'googleai':
+            engine = GoogleAITranslateEngine(
+                name='googleai',
+                url=engine_config.get('api_url', ''),
+                api_key=engine_config.get('api_key', ''),
+                model=engine_config.get('model', ''),
+                max_retry=engine_config.get('max_retry', 3),
+                retry_delay=engine_config.get('retry_delay', 1)
+            )
+    
+    if not engine:
+        return {'trans': texts}
+    
     if engine.name == 'baidu':
         result = baidu_translate(
             texts=texts, app_id=engine.app_id, api_key=engine.api_key, 
@@ -180,7 +242,8 @@ def translate(texts, engine: Union[
         try:
             result = localai_translate(
                 texts, engine.url, engine.api_key, engine.model,
-                max_retry=engine.max_retry, retry_delay=engine.retry_delay)
+                max_retry=engine.max_retry, retry_delay=engine.retry_delay,
+                context_window=getattr(engine, 'context_window', 2048))
             if 'error_code' not in result:
                 rtn = {'trans': result}
             else:
@@ -529,11 +592,14 @@ def openai_translate(texts, url: str, api_key: str, model: str, to="zh_CN", max_
                 }
 
 
-def localai_translate(texts, url: str, api_key: str, model: str, to="zh_CN", max_retry=3, retry_delay=1):
+def localai_translate(texts, url: str, api_key: str, model: str, to="zh_CN", max_retry=3, retry_delay=2, context_window=2048):
     """
     兼容本地 AI API (如 Ollama, LocalAI, vLLM 等) 的翻译函数，带重试机制
     针对日本成人影片标题和简介优化
     支持专用翻译模型如 facebook/nllb-200-distilled-600M
+    
+    Args:
+        context_window: 模型上下文窗口大小（token数），用于计算合适的max_tokens和timeout
     """
     api_url = str(url).rstrip('/') + '/v1/chat/completions'
     headers = {
@@ -542,10 +608,23 @@ def localai_translate(texts, url: str, api_key: str, model: str, to="zh_CN", max
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
     
-    # 根据文本长度动态调整 max_tokens 和 timeout
-    is_short_text = len(texts) < 100
-    max_tokens = 256 if is_short_text else 1024
-    timeout = 30 if is_short_text else 60
+    # 根据上下文窗口和文本长度动态调整 max_tokens 和 timeout
+    # 预留约 25% 的上下文给系统提示词和响应
+    available_tokens = int(context_window * 0.75)
+    
+    text_len = len(texts)
+    if text_len < 100:
+        max_tokens = min(256, available_tokens)
+        timeout = 30
+    elif text_len < 500:
+        max_tokens = min(512, available_tokens)
+        timeout = 60
+    elif text_len < 1500:
+        max_tokens = min(1024, available_tokens)
+        timeout = 120
+    else:
+        max_tokens = min(2048, available_tokens)
+        timeout = 300
     
     # 检测是否为专用翻译模型（如 NLLB, hy-mt2-7b 等）
     is_translation_model = any(x in model.lower() for x in ['nllb', 'translation', 'translator', 'hy-mt2', 'mt2-7b'])
@@ -683,12 +762,17 @@ def localai_translate(texts, url: str, api_key: str, model: str, to="zh_CN", max
                 }
 
 
-def googleai_translate(texts, url: Url, api_key: str, model: str, to="zh_CN", max_retry=3, retry_delay=1):
+def googleai_translate(texts, url: str, api_key: str, model: str, to="zh_CN", max_retry=3, retry_delay=1):
     """
     使用 Google Gemini 翻译文本（默认翻译为简体中文），带重试机制
-    仅翻译日文部分，保留非日文字符不变
+    使用 OpenAI 兼容接口，支持自定义 API 地址
     """
-    api_url = f"{url}{model}:generateContent?key={api_key}"
+    if not url:
+        api_url = "https://generativelanguage.googleapis.com/v1beta"
+    else:
+        api_url = str(url).rstrip('/')
+    
+    api_url = f"{api_url}/models/{model}:generateContent?key={api_key}"
 
     headers = {
         "Content-Type": "application/json"
@@ -713,7 +797,7 @@ def googleai_translate(texts, url: Url, api_key: str, model: str, to="zh_CN", ma
 
     for attempt in range(1, max_retry + 1):
         try:
-            r = requests.post(api_url, headers=headers, json=data, timeout=10)
+            r = requests.post(api_url, headers=headers, json=data, timeout=30)
             if r.status_code == 200:
                 result_json = r.json()
                 if "candidates" in result_json:

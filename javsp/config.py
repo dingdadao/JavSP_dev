@@ -269,6 +269,7 @@ class LocalAITranslateEngine(BaseConfig):
     url: Url
     api_key: str = ''
     model: str
+    context_window: int = 2048
     max_retry: int = 3
     retry_delay: int = 1
 

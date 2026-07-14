@@ -9,6 +9,8 @@ import {
   UnorderedListOutlined,
   FileTextOutlined,
   ToolOutlined,
+  BugOutlined,
+  SoundOutlined,
 } from '@ant-design/icons'
 import { SocketProvider } from './hooks/useSocket'
 
@@ -20,6 +22,8 @@ const Watcher = lazy(() => import('./pages/Watcher'))
 const Logs = lazy(() => import('./pages/Logs'))
 const MovieDetail = lazy(() => import('./pages/MovieDetail'))
 const Checker = lazy(() => import('./pages/Checker'))
+const IntegrityCheck = lazy(() => import('./pages/IntegrityCheck'))
+const SubtitleGenerator = lazy(() => import('./pages/SubtitleGenerator'))
 
 const { Header, Sider, Content } = Layout
 
@@ -42,6 +46,8 @@ function AppLayout() {
     { key: '/watcher', icon: <FolderOutlined />, label: <Link to="/watcher">文件监控</Link> },
     { key: '/logs', icon: <FileTextOutlined />, label: <Link to="/logs">操作日志</Link> },
     { key: '/checker', icon: <ToolOutlined />, label: <Link to="/checker">命名检查</Link> },
+    { key: '/integrity', icon: <BugOutlined />, label: <Link to="/integrity">完整性检查</Link> },
+    { key: '/subtitle', icon: <SoundOutlined />, label: <Link to="/subtitle">字幕生成</Link> },
   ]
 
   return (
@@ -96,6 +102,8 @@ function AppLayout() {
               <Route path="/logs" element={<Logs />} />
               <Route path="/movie" element={<MovieDetail />} />
               <Route path="/checker" element={<Checker />} />
+              <Route path="/integrity" element={<IntegrityCheck />} />
+              <Route path="/subtitle" element={<SubtitleGenerator />} />
             </Routes>
           </Suspense>
         </Content>

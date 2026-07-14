@@ -75,6 +75,57 @@ ensure_basics() {
     info "基础工具 (curl, git) ✓"
 }
 
+ensure_ffmpeg() {
+    if command -v ffmpeg &>/dev/null; then
+        info "ffmpeg $(ffmpeg -version 2>&1 | head -1 | awk '{print $3}') ✓"
+        return 0
+    fi
+    warn "未找到 ffmpeg，尝试自动安装..."
+    if [[ "$OS" == "macos" ]]; then
+        if command -v brew &>/dev/null; then
+            brew install ffmpeg
+        else
+            error "请先安装 Homebrew，然后运行: brew install ffmpeg"
+            return 1
+        fi
+    elif [[ "$OS" == "linux" ]]; then
+        if command -v apt-get &>/dev/null; then
+            sudo apt-get update && sudo apt-get install -y ffmpeg
+        elif command -v yum &>/dev/null; then
+            sudo yum install -y epel-release && sudo yum install -y ffmpeg
+        elif command -v dnf &>/dev/null; then
+            sudo dnf install -y ffmpeg
+        else
+            error "无法自动安装 ffmpeg，请手动安装"
+            return 1
+        fi
+    fi
+    if command -v ffmpeg &>/dev/null; then
+        info "ffmpeg $(ffmpeg -version 2>&1 | head -1 | awk '{print $3}') ✓"
+    else
+        warn "ffmpeg 安装失败，视频完整性检查功能将不可用"
+    fi
+}
+
+ensure_mlx_whisper() {
+    # 仅在 Mac Apple Silicon 上安装 mlx-whisper
+    if [[ "$(uname -s)" != "Darwin" ]] || [[ "$(uname -m)" != "arm64" ]]; then
+        return 0
+    fi
+    # 使用 poetry run 来检测项目虚拟环境中是否已安装
+    if poetry run python -c "import mlx_whisper" 2>/dev/null; then
+        info "mlx-whisper 已安装 ✓"
+        return 0
+    fi
+    info "安装 mlx-whisper（首次可能较慢，需下载模型）..."
+    poetry run pip install mlx-whisper 2>&1 | tail -5
+    if poetry run python -c "import mlx_whisper" 2>/dev/null; then
+        info "mlx-whisper 安装成功 ✓"
+    else
+        warn "mlx-whisper 安装失败，字幕生成功能将不可用"
+    fi
+}
+
 ensure_python() {
     if command -v python3 &>/dev/null; then
         info "Python $(python3 --version 2>&1 | awk '{print $2}') ✓"
@@ -209,9 +260,11 @@ do_install() {
     echo -e "${CYAN}========== 安装 JavSP Web ==========${NC}"
     ensure_basics
     ensure_python
+    ensure_ffmpeg
     ensure_poetry
     ensure_node
     install_python_deps
+    ensure_mlx_whisper
     install_node_deps
     build_frontend
     echo ""
@@ -245,6 +298,9 @@ do_start() {
     info "构建前端..."
     install_node_deps
     build_frontend
+
+    # Mac Apple Silicon 每次启动时检查/安装 mlx-whisper
+    ensure_mlx_whisper
 
     cd "$SCRIPT_DIR"
     info "启动 Web 服务 ($HOST:$PORT)..."
@@ -381,6 +437,7 @@ do_status() {
     command -v python3 &>/dev/null && echo -e "  Python:    ${GREEN}$(python3 --version 2>&1 | awk '{print $2}')${NC}" || echo -e "  Python:    ${RED}未安装${NC}"
     command -v poetry  &>/dev/null && echo -e "  Poetry:    ${GREEN}$(poetry --version 2>&1 | awk '{print $3}')${NC}" || echo -e "  Poetry:    ${RED}未安装${NC}"
     command -v node    &>/dev/null && echo -e "  Node.js:   ${GREEN}$(node -v)${NC}" || echo -e "  Node.js:   ${RED}未安装${NC}"
+    command -v ffmpeg  &>/dev/null && echo -e "  ffmpeg:    ${GREEN}$(ffmpeg -version 2>&1 | head -1 | awk '{print $3}')${NC}" || echo -e "  ffmpeg:    ${RED}未安装${NC}"
 
     if [[ -f "$DIST_DIR/index.html" ]]; then
         local build_time

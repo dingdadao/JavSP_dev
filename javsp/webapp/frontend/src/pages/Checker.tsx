@@ -31,6 +31,7 @@ interface ScanResult {
   expected_fanart_name: string
   avid: string
   avid_source: string
+  variant?: string
   issues: string[]
   mismatch_fields: string[]
   has_poster: boolean
@@ -250,10 +251,8 @@ export default function Checker() {
 
   // 加载默认路径并尝试读取缓存
   useEffect(() => {
-    const hardcoded = '/Volumes/data/goodStuff/JapanMovie'
     fetchCheckerDefaultPath().then(({ data }: any) => {
-      // 优先使用用户配置的路径，其次硬编码路径
-      const p = data?.default_path || hardcoded
+      const p = data?.default_path || ''
       if (p) {
         setDefaultPath(p)
         setScanPath(p)
@@ -265,12 +264,7 @@ export default function Checker() {
           }
         }).catch(() => {})
       }
-    }).catch(() => {
-      if (hardcoded) {
-        setDefaultPath(hardcoded)
-        setScanPath(hardcoded)
-      }
-    })
+    }).catch(() => {})
     loadTaskHistory()
     loadActionLogs()
   }, [])
@@ -451,11 +445,11 @@ export default function Checker() {
     })
   }, [message])
 
-  // 计算重复番号组
+  // 计算重复番号组（相同 avid 即为重复，-C/-U/-UC 也属于同一番号）
   const [selectedDupAvids, setSelectedDupAvids] = useState<Set<string>>(new Set())
 
   const duplicateGroups = (() => {
-    if (!scanData) return [] as { avid: string; files: string[] }[]
+    if (!scanData) return [] as { avid: string; files: string[]; key: string }[]
     const map = new Map<string, string[]>()
     for (const r of scanData.results) {
       if (!r.avid) continue
@@ -465,7 +459,7 @@ export default function Checker() {
     }
     return [...map.entries()]
       .filter(([_, files]) => files.length > 1)
-      .map(([avid, files]) => ({ avid, files }))
+      .map(([avid, files]) => ({ avid, files, key: avid }))
   })()
 
   const handleMerge = useCallback(async (avid: string, videoPaths: string[]) => {
@@ -685,7 +679,6 @@ export default function Checker() {
       width: 150,
       render: (_: any, record: ScanResult) => {
         if (!record.created_time) return <Typography.Text type="secondary">-</Typography.Text>
-        // 对于重复番号，显示所有同番号文件的创建时间
         const cnt = dupCountMap.get(record.avid) || 1
         if (cnt > 1) {
           const dupFiles = (scanData?.results || []).filter(r => r.avid === record.avid && r.avid)

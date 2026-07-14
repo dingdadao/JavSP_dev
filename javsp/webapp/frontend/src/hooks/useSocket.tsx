@@ -52,6 +52,27 @@ interface ScanProgress {
   data?: any           // 扫描完成时携带完整结果
 }
 
+interface IntegrityProgress {
+  task_id: string
+  status: string
+  total?: number
+  completed?: number
+  current?: string
+  message?: string
+  data?: any
+  ok_count?: number
+  error_count?: number
+}
+
+interface SubtitleProgress {
+  task_id: string
+  phase: string       // 'audio' | 'subtitle'
+  status: string
+  item_id?: number
+  basename?: string
+  message?: string
+}
+
 interface SocketContextType {
   socket: Socket | null
   connected: boolean
@@ -60,6 +81,8 @@ interface SocketContextType {
   lastRepairProgress: RepairProgress | null
   lastFixProgress: RepairProgress | null
   lastScanProgress: ScanProgress | null
+  lastIntegrityProgress: IntegrityProgress | null
+  lastSubtitleProgress: SubtitleProgress | null
 }
 
 const SocketContext = createContext<SocketContextType>({
@@ -70,6 +93,8 @@ const SocketContext = createContext<SocketContextType>({
   lastRepairProgress: null,
   lastFixProgress: null,
   lastScanProgress: null,
+  lastIntegrityProgress: null,
+  lastSubtitleProgress: null,
 })
 
 export function SocketProvider({ children }: { children: ReactNode }) {
@@ -80,6 +105,8 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const [lastRepairProgress, setLastRepairProgress] = useState<RepairProgress | null>(null)
   const [lastFixProgress, setLastFixProgress] = useState<RepairProgress | null>(null)
   const [lastScanProgress, setLastScanProgress] = useState<ScanProgress | null>(null)
+  const [lastIntegrityProgress, setLastIntegrityProgress] = useState<IntegrityProgress | null>(null)
+  const [lastSubtitleProgress, setLastSubtitleProgress] = useState<SubtitleProgress | null>(null)
 
   useEffect(() => {
     // 开发环境 Vite 会代理 /socket.io，生产环境由后端同时提供静态资源和 Socket.IO
@@ -122,13 +149,21 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       console.log('[socket] scan_progress:', data)
       setLastScanProgress(data)
     })
+    s.on('integrity_progress', (data: IntegrityProgress) => {
+      console.log('[socket] integrity_progress:', data)
+      setLastIntegrityProgress(data)
+    })
+    s.on('subtitle_progress', (data: SubtitleProgress) => {
+      console.log('[socket] subtitle_progress:', data)
+      setLastSubtitleProgress(data)
+    })
 
     setSocket(s)
     return () => { s.disconnect() }
   }, [])
 
   return (
-    <SocketContext.Provider value={{ socket, connected, lastProgress, lastWatcherEvent, lastRepairProgress, lastFixProgress, lastScanProgress }}>
+    <SocketContext.Provider value={{ socket, connected, lastProgress, lastWatcherEvent, lastRepairProgress, lastFixProgress, lastScanProgress, lastIntegrityProgress, lastSubtitleProgress }}>
       {children}
     </SocketContext.Provider>
   )

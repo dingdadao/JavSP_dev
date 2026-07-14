@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import {
   Card, Form, Input, Button, Switch, Select, InputNumber,
-  Typography, Tabs, Space, Spin, Tag, Tooltip, Alert, Table, Modal, App
+  Typography, Tabs, Space, Spin, Tag, Tooltip, Alert, Table, Modal, App, Empty
 } from 'antd'
 import {
   SaveOutlined, SettingOutlined, PlusOutlined, DeleteOutlined,
@@ -115,14 +115,32 @@ function ScannerConfig({ saving, onSave }: { saving: boolean; onSave: (v: any) =
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(true)
 
+  const handleFinish = (values: any) => {
+    // 将逗号分隔的字符串转回数组
+    if (typeof values.filename_extensions === 'string') {
+      values.filename_extensions = values.filename_extensions.split(',').map((s: string) => s.trim()).filter(Boolean)
+    }
+    if (typeof values.ignored_folder_name_pattern === 'string') {
+      values.ignored_folder_name_pattern = values.ignored_folder_name_pattern.split('\n').map((s: string) => s.trim()).filter(Boolean)
+    }
+    if (typeof values.ignored_id_pattern === 'string') {
+      values.ignored_id_pattern = values.ignored_id_pattern.split('\n').map((s: string) => s.trim()).filter(Boolean)
+    }
+    onSave(values)
+  }
+
   useEffect(() => {
     fetchConfig('scanner').then(({ data }) => {
       const s = data?.scanner || {}
       form.setFieldsValue({
         input_directory: s.input_directory || '',
         minimum_size: s.minimum_size || '232MiB',
+        filename_extensions: Array.isArray(s.filename_extensions) ? s.filename_extensions.join(', ') : '',
+        ignored_folder_name_pattern: Array.isArray(s.ignored_folder_name_pattern) ? s.ignored_folder_name_pattern.join('\n') : '',
+        ignored_id_pattern: Array.isArray(s.ignored_id_pattern) ? s.ignored_id_pattern.join('\n') : '',
         skip_nfo_dir: s.skip_nfo_dir ?? false,
         clear_skipped_on_rescan: s.clear_skipped_on_rescan ?? true,
+        check_file_integrity: s.check_file_integrity ?? true,
       })
     }).finally(() => setLoading(false))
   }, [])
@@ -132,7 +150,7 @@ function ScannerConfig({ saving, onSave }: { saving: boolean; onSave: (v: any) =
       <Button icon={<SaveOutlined />} type="primary" loading={saving} onClick={() => form.submit()}>保存</Button>
     }>
       <Spin spinning={loading}>
-        <Form form={form} layout="vertical" onFinish={onSave}>
+        <Form form={form} layout="vertical" onFinish={handleFinish}>
           <Form.Item
             label={<span>源文件夹路径<Tip text="要扫描的影片文件夹路径。留空则运行时询问。支持变量如 /Volumes/data/download" /></span>}
             name="input_directory"
@@ -146,6 +164,26 @@ function ScannerConfig({ saving, onSave }: { saving: boolean; onSave: (v: any) =
             <Input placeholder="232MiB" />
           </Form.Item>
           <Form.Item
+            label={<span>影片文件后缀<Tip text="视为影片的文件后缀列表，英文逗号分隔" /></span>}
+            name="filename_extensions"
+          >
+            <Input.TextArea placeholder=".mkv, .mp4, .avi" rows={2} />
+          </Form.Item>
+          <Form.Item
+            label={<span>忽略文件夹名正则<Tip text="扫描时忽略的文件夹名正则，每行一个" /></span>}
+            name="ignored_folder_name_pattern"
+          >
+            <Input.TextArea placeholder="^\.
+^#recycle$" rows={3} />
+          </Form.Item>
+          <Form.Item
+            label={<span>番号忽略正则<Tip text="匹配番号时忽略的正则表达式，每行一个。不熟悉正则请勿修改" /></span>}
+            name="ignored_id_pattern"
+          >
+            <Input.TextArea placeholder="(144|240|360|480|720|1080)[Pp]
+[24][Kk]" rows={4} />
+          </Form.Item>
+          <Form.Item
             label={<span>跳过已有NFO的目录<Tip text="开启后，如果目录下已有 .nfo 文件，将跳过该目录不再重新刮削。适合增量扫描" /></span>}
             name="skip_nfo_dir" valuePropName="checked"
           >
@@ -154,6 +192,12 @@ function ScannerConfig({ saving, onSave }: { saving: boolean; onSave: (v: any) =
           <Form.Item
             label={<span>重新扫描时清理 .skipped<Tip text="开启后，重新扫描时会清除之前的 .skipped 标记文件，解决文件数不变的问题" /></span>}
             name="clear_skipped_on_rescan" valuePropName="checked"
+          >
+            <Switch />
+          </Form.Item>
+          <Form.Item
+            label={<span>视频完整性检查<Tip text="刮削前使用 ffmpeg 检查视频文件完整性。文件有错误时跳过刮削，需要系统安装 ffmpeg" /></span>}
+            name="check_file_integrity" valuePropName="checked"
           >
             <Switch />
           </Form.Item>
@@ -617,11 +661,227 @@ function CrawlerConfig({ saving, onSave }: { saving: boolean; onSave: (group: st
   )
 }
 
+/* ========== 刮削相关：翻译模型管理 ========== */
+function TranslateModelConfig() {
+  const [models, setModels] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [activeModel, setActiveModel] = useState<string>('')
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [editModel, setEditModel] = useState<any>(null)
+  const [addForm] = Form.useForm()
+  const [addEngine, setAddEngine] = useState('localai')
+
+  useEffect(() => {
+    fetch('/api/translate/models')
+      .then(res => res.json())
+      .then(({ data }) => {
+        setModels(data || [])
+        const active = data?.find((m: any) => m.is_active)
+        setActiveModel(active?.name || '')
+      })
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handleSaveModel = (values: any) => {
+    const config: any = {}
+    if (['openai', 'localai', 'googleai'].includes(values.engine)) {
+      config.api_url = values.api_url || ''
+      config.api_key = values.api_key || ''
+      config.model = values.model || ''
+      if (values.context_window) {
+        config.context_window = values.context_window
+      }
+    } else if (values.engine === 'baidu') {
+      config.app_id = values.app_id || ''
+      config.api_key = values.api_key || ''
+    } else if (values.engine === 'bing') {
+      config.api_key = values.api_key || ''
+    } else if (values.engine === 'claude') {
+      config.api_key = values.api_key || ''
+    }
+    
+    const method = editModel ? 'PUT' : 'POST'
+    const body: any = {
+      name: values.name,
+      engine: values.engine,
+      config,
+      is_active: values.is_active || false,
+    }
+    if (editModel) {
+      body.id = editModel.id
+    }
+    
+    fetch('/api/translate/model', {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then(() => {
+      setShowAddModal(false)
+      setEditModel(null)
+      addForm.resetFields()
+      fetch('/api/translate/models')
+        .then(res => res.json())
+        .then(({ data }) => {
+          setModels(data || [])
+          const active = data?.find((m: any) => m.is_active)
+          setActiveModel(active?.name || '')
+        })
+    })
+  }
+
+  const handleSetActive = (name: string) => {
+    fetch('/api/translate/model/active', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    }).then(() => {
+      setActiveModel(name)
+      setModels(models.map(m => ({ ...m, is_active: m.name === name })))
+    })
+  }
+
+  const handleDelete = (name: string) => {
+    if (confirm(`确定删除模型 "${name}" 吗？`)) {
+      fetch('/api/translate/model', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      }).then(() => {
+        fetch('/api/translate/models')
+          .then(res => res.json())
+          .then(({ data }) => {
+            setModels(data || [])
+            const active = data?.find((m: any) => m.is_active)
+            setActiveModel(active?.name || '')
+          })
+      })
+    }
+  }
+
+  return (
+    <Card title="翻译模型管理" variant="borderless" extra={
+      <Button icon={<PlusOutlined />} onClick={() => setShowAddModal(true)}>添加模型</Button>
+    }>
+      <Spin spinning={loading}>
+        {models.length === 0 ? (
+          <Empty description="暂无翻译模型，请点击上方按钮添加" />
+        ) : (
+          <Table
+            dataSource={models}
+            rowKey="name"
+            columns={[
+              { title: '模型名称', dataIndex: 'name', key: 'name' },
+              { title: '引擎类型', dataIndex: 'engine', key: 'engine', render: (e: string) => TRANSLATE_ENGINES.find(t => t.value === e)?.label || e },
+              { title: '模型', key: 'model', render: (_, record: any) => record.config_json?.model || '-' },
+              { title: '状态', key: 'status', render: (_, record: any) => record.is_active ? <Tag color="green">已激活</Tag> : <Tag>未激活</Tag> },
+              { title: '操作', key: 'action', render: (_, record: any) => (
+                <Space>
+                  <Button size="small" onClick={() => {
+                    setEditModel(record)
+                    setAddEngine(record.engine)
+                    addForm.setFieldsValue({
+                      name: record.name,
+                      engine: record.engine,
+                      is_active: record.is_active,
+                      ...record.config_json,
+                    })
+                    setShowAddModal(true)
+                  }}>编辑</Button>
+                  {!record.is_active && (
+                    <Button size="small" onClick={() => handleSetActive(record.name)}>激活</Button>
+                  )}
+                  <Button size="small" danger onClick={() => handleDelete(record.name)}>删除</Button>
+                </Space>
+              )}
+            ]}
+          />
+        )}
+        {activeModel && (
+          <Alert type="success" showIcon message={`当前激活的翻译模型: ${activeModel}`} style={{ marginTop: 16 }} />
+        )}
+      </Spin>
+
+      <Modal
+        title={editModel ? '编辑翻译模型' : '添加翻译模型'}
+        open={showAddModal}
+        onCancel={() => {
+          setShowAddModal(false)
+          setEditModel(null)
+          addForm.resetFields()
+        }}
+        footer={null}
+      >
+        <Form form={addForm} layout="vertical" onFinish={handleSaveModel}>
+          <Form.Item label="模型名称" name="name" rules={[{ required: true, message: '请输入模型名称' }]}>
+            <Input placeholder="如：hy-mt2-7b-local" />
+          </Form.Item>
+          <Form.Item label="引擎类型" name="engine" rules={[{ required: true, message: '请选择引擎类型' }]}>
+            <Select value={addEngine} onChange={setAddEngine} options={TRANSLATE_ENGINES.filter(e => e.value)} />
+          </Form.Item>
+          <Form.Item label="设为默认" name="is_active" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+
+          {['openai', 'localai', 'googleai'].includes(addEngine) && (
+            <>
+              <Form.Item label="API 地址" name="api_url">
+                <Input placeholder={addEngine === 'googleai' ? '留空使用官方地址' : 'http://localhost:1234'} />
+              </Form.Item>
+              <Form.Item label="API Key" name="api_key">
+                <Input.Password placeholder={addEngine === 'googleai' ? 'AIzaSy...' : 'sk-...'} />
+              </Form.Item>
+              <Form.Item label="模型名称" name="model" rules={[{ required: true, message: '请输入模型名称' }]}>
+                <Input placeholder={addEngine === 'googleai' ? 'gemini-1.5-flash' : 'hy-mt2-7b'} />
+              </Form.Item>
+              {addEngine === 'localai' && (
+                <Form.Item label="上下文窗口" name="context_window" initialValue={2048}>
+                  <Input type="number" min={256} max={128000} placeholder="2048" />
+                </Form.Item>
+              )}
+            </>
+          )}
+
+          {addEngine === 'baidu' && (
+            <>
+              <Form.Item label="App ID" name="app_id">
+                <Input placeholder="百度翻译 App ID" />
+              </Form.Item>
+              <Form.Item label="密钥" name="api_key">
+                <Input.Password placeholder="百度翻译密钥" />
+              </Form.Item>
+            </>
+          )}
+
+          {addEngine === 'bing' && (
+            <Form.Item label="API Key" name="api_key">
+              <Input.Password placeholder="Bing API Key" />
+            </Form.Item>
+          )}
+
+          {addEngine === 'claude' && (
+            <Form.Item label="API Key" name="api_key">
+              <Input.Password placeholder="Claude API Key" />
+            </Form.Item>
+          )}
+
+          <Form.Item>
+            <Space>
+              <Button onClick={() => setShowAddModal(false)}>取消</Button>
+              <Button type="primary" htmlType="submit">保存</Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
+    </Card>
+  )
+}
+
 /* ========== 刮削相关：翻译设置 ========== */
 function TranslatorConfig({ saving, onSave }: { saving: boolean; onSave: (v: any) => void }) {
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(true)
   const [engine, setEngine] = useState('')
+  const [translateMode, setTranslateMode] = useState('normal')
   const translatorDataRef = useRef<any>(null)
 
   useEffect(() => {
@@ -630,14 +890,16 @@ function TranslatorConfig({ saving, onSave }: { saving: boolean; onSave: (v: any
       translatorDataRef.current = t
       const eng = t.engine || ''
       setEngine(eng)
-      // 先设置非条件渲染的字段
+      setTranslateMode(t.translate_mode || 'normal')
       form.setFieldsValue({
+        translate_mode: t.translate_mode || 'normal',
         engine: eng,
         baidu_app_id: t.baidu_app_id || '',
         bing_api_key: t.bing_api_key || '',
         api_url: t.api_url || '',
         api_key: t.api_key || '',
         model: t.model || '',
+        context_window: t.context_window || 2048,
       })
     }).finally(() => setLoading(false))
   }, [])
@@ -657,6 +919,10 @@ function TranslatorConfig({ saving, onSave }: { saving: boolean; onSave: (v: any
     setEngine(val)
   }
 
+  const handleTranslateModeChange = (val: string) => {
+    setTranslateMode(val)
+  }
+
   return (
     <Card title="翻译设置" variant="borderless" extra={
       <Button icon={<SaveOutlined />} type="primary" loading={saving} onClick={() => form.submit()}>保存</Button>
@@ -664,28 +930,44 @@ function TranslatorConfig({ saving, onSave }: { saving: boolean; onSave: (v: any
       <Spin spinning={loading}>
         <Form form={form} layout="vertical" onFinish={onSave}>
           <Form.Item
-            label={<span>翻译引擎<Tip text="选择翻译引擎。Google 免费但质量一般；大模型翻译质量最好但需要 API；留空则不翻译标题和简介" /></span>}
-            name="engine"
+            label={<span>翻译模式<Tip text="选择翻译模式。AI翻译使用配置的翻译模型，普通翻译使用内置翻译器" /></span>}
+            name="translate_mode"
           >
-            <Select options={TRANSLATE_ENGINES} onChange={handleEngineChange} style={{ width: 320 }} />
+            <Select options={[
+              { label: 'AI 翻译（使用翻译模型）', value: 'ai' },
+              { label: '普通翻译（内置翻译器）', value: 'normal' },
+            ]} onChange={handleTranslateModeChange} style={{ width: 320 }} />
           </Form.Item>
 
-          {engine && (
-            <Form.Item
-              label={<span>翻译标题<Tip text="是否将影片标题翻译为中文。关闭则保留原始日文标题" /></span>}
-              name="translate_title" valuePropName="checked"
-            >
-              <Switch />
-            </Form.Item>
+          {translateMode === 'ai' && (
+            <Alert message="已选择 AI 翻译模式，请在「翻译模型管理」中配置并激活翻译模型" type="info" style={{ marginBottom: 16 }} />
           )}
-          {engine && (
-            <Form.Item
-              label={<span>翻译剧情简介<Tip text="是否将影片剧情简介翻译为中文。关闭则保留原始语言" /></span>}
-              name="translate_plot" valuePropName="checked"
-            >
-              <Switch />
-            </Form.Item>
-          )}
+
+          {translateMode === 'normal' && (
+            <>
+              <Form.Item
+                label={<span>翻译引擎<Tip text="选择翻译引擎。Google 免费但质量一般；大模型翻译质量最好但需要 API；留空则不翻译标题和简介" /></span>}
+                name="engine"
+              >
+                <Select options={TRANSLATE_ENGINES} onChange={handleEngineChange} style={{ width: 320 }} />
+              </Form.Item>
+
+              {engine && (
+                <Form.Item
+                  label={<span>翻译标题<Tip text="是否将影片标题翻译为中文。关闭则保留原始日文标题" /></span>}
+                  name="translate_title" valuePropName="checked"
+                >
+                  <Switch />
+                </Form.Item>
+              )}
+              {engine && (
+                <Form.Item
+                  label={<span>翻译剧情简介<Tip text="是否将影片剧情简介翻译为中文。关闭则保留原始语言" /></span>}
+                  name="translate_plot" valuePropName="checked"
+                >
+                  <Switch />
+                </Form.Item>
+              )}
 
           {engine === 'baidu' && (
             <>
@@ -777,11 +1059,20 @@ function TranslatorConfig({ saving, onSave }: { saving: boolean; onSave: (v: any
               >
                 <Input placeholder="hy-mt2-7b" />
               </Form.Item>
+              <Form.Item
+                label="上下文窗口"
+                name="context_window"
+                initialValue={2048}
+                extra="模型支持的最大上下文窗口（token数），用于计算单次翻译长度限制。hy-mt2-7b=2048, Llama 3 7B=4096, Qwen 2 7B=8192"
+              >
+                <Input type="number" min={256} max={128000} placeholder="2048" />
+              </Form.Item>
             </>
           )}
-
           {engine === 'google' && (
             <Alert type="info" showIcon message="Google 翻译免费使用，无需配置 API Key。翻译质量中等，适合日常使用。" />
+          )}
+            </>
           )}
         </Form>
       </Spin>
@@ -833,6 +1124,145 @@ function NetworkConfig({ saving, onSave }: { saving: boolean; onSave: (v: any) =
           <Form.Item
             label={<span>SSL 证书验证<Tip text="是否验证 HTTPS 证书。关闭可解决部分自签证书的报错，但安全性降低。正常情况建议开启" /></span>}
             name="ssl_verification" valuePropName="checked"
+          >
+            <Switch />
+          </Form.Item>
+        </Form>
+      </Spin>
+    </Card>
+  )
+}
+
+/* ========== 文件检查器 ========== */
+function CheckerConfig({ saving, onSave }: { saving: boolean; onSave: (v: any) => void }) {
+  const [form] = Form.useForm()
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetchConfig('checker').then(({ data }) => {
+      const c = data?.checker || {}
+      form.setFieldsValue({
+        scan_path: c.scan_path ?? '',
+      })
+    }).finally(() => setLoading(false))
+  }, [])
+
+  return (
+    <Card title="文件检查器" variant="borderless" extra={
+      <Button icon={<SaveOutlined />} type="primary" loading={saving} onClick={() => form.submit()}>保存</Button>
+    }>
+      <Spin spinning={loading}>
+        <Form form={form} layout="vertical" onFinish={onSave}>
+          <Form.Item
+            label={<span>默认扫描路径<Tip text="「文件命名检查」页面的默认扫描目录。留空则需要手动输入路径" /></span>}
+            name="scan_path"
+          >
+            <Input placeholder="留空则需要在检查页面手动输入路径" />
+          </Form.Item>
+        </Form>
+      </Spin>
+    </Card>
+  )
+}
+
+/* ========== 字幕生成 ========== */
+function SubtitleConfig({ saving, onSave }: { saving: boolean; onSave: (v: any) => void }) {
+  const [form] = Form.useForm()
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetchConfig('subtitle').then(({ data }) => {
+      const s = data?.subtitle || {}
+      form.setFieldsValue({
+        scan_path: s.scan_path ?? '',
+        whisper_model: s.whisper_model ?? 'mlx-community/whisper-large-v3-turbo',
+        whisper_language: s.whisper_language ?? 'ja',
+        subtitle_format: s.subtitle_format ?? 'srt',
+        subtitle_mode: s.subtitle_mode ?? 'original',
+        translate_max_length: s.translate_max_length ?? 1500,
+        audio_store_path: s.audio_store_path ?? '',
+        delete_audio_after: s.delete_audio_after ?? false,
+        audio_concurrency: s.audio_concurrency ?? 2,
+        subtitle_concurrency: s.subtitle_concurrency ?? 1,
+        segment_duration: s.segment_duration ?? 30,
+        filter_fillers: s.filter_fillers ?? false,
+      })
+    }).finally(() => setLoading(false))
+  }, [])
+
+  return (
+    <Card title="字幕生成" variant="borderless" extra={
+      <Button icon={<SaveOutlined />} type="primary" loading={saving} onClick={() => form.submit()}>保存</Button>
+    }>
+      <Spin spinning={loading}>
+        <Form form={form} layout="vertical" onFinish={onSave}>
+          <Form.Item
+            label={<span>默认扫描路径<Tip text="「字幕生成」页面的默认扫描目录。留空则回退到文件检查器的扫描路径" /></span>}
+            name="scan_path"
+          >
+            <Input placeholder="留空则使用文件检查器的默认路径" />
+          </Form.Item>
+          <Form.Item
+            label={<span>Whisper 模型<Tip text="mlx-whisper 使用的模型名称或本地路径" /></span>}
+            name="whisper_model"
+          >
+            <Input />
+          </Form.Item>
+          <Form.Item
+            label={<span>识别语言<Tip text="语音识别的默认语言，ja=日语" /></span>}
+            name="whisper_language"
+          >
+            <Input />
+          </Form.Item>
+          <Form.Item
+            label={<span>字幕格式<Tip text="生成的字幕文件格式：srt / ass / vtt" /></span>}
+            name="subtitle_format"
+          >
+            <Input />
+          </Form.Item>
+          <Form.Item
+            label={<span>字幕模式<Tip text="original=仅原语言, chinese=仅中文翻译, bilingual=双语对照" /></span>}
+            name="subtitle_mode"
+          >
+            <Select options={[
+              { value: 'original', label: '仅原语言' },
+              { value: 'chinese', label: '仅中文' },
+              { value: 'bilingual', label: '双语对照' },
+            ]} />
+          </Form.Item>
+          <Form.Item
+            label={<span>单次翻译最大字符数<Tip text="根据翻译模型上下文窗口调整：hy-mt2-7b建议1500，Llama 3 7B建议3000，Qwen 2 7B建议6000" /></span>}
+            name="translate_max_length"
+          >
+            <Input type="number" min={100} max={50000} />
+          </Form.Item>
+          <Form.Item
+            label={<span>音轨并发数<Tip text="同时提取音轨的视频数量，建议 1-4" /></span>}
+            name="audio_concurrency"
+          >
+            <Input type="number" min={1} max={8} />
+          </Form.Item>
+          <Form.Item
+            label={<span>字幕并发数<Tip text="同时生成字幕的音轨数量，建议 1-2（受显存限制）" /></span>}
+            name="subtitle_concurrency"
+          >
+            <Input type="number" min={1} max={4} />
+          </Form.Item>
+          <Form.Item
+            label={<span>音轨存放路径<Tip text="提取的 WAV 音轨文件存放目录。留空则与视频同目录" /></span>}
+            name="audio_store_path"
+          >
+            <Input placeholder="留空则与视频同目录" />
+          </Form.Item>
+          <Form.Item
+            label={<span>生成后删除音轨<Tip text="字幕生成完成后是否自动删除临时 WAV 文件" /></span>}
+            name="delete_audio_after" valuePropName="checked"
+          >
+            <Switch />
+          </Form.Item>
+          <Form.Item
+            label={<span>过滤语气词<Tip text="过滤只包含语气词/拟声词的字幕片段（如ああ、ははは等），只保留实际对话内容" /></span>}
+            name="filter_fillers" valuePropName="checked"
           >
             <Switch />
           </Form.Item>
@@ -915,6 +1345,8 @@ export default function Config() {
                 <ScannerConfig saving={saving} onSave={(v) => handleSave('scanner', v)} />
                 <SummarizerConfig saving={saving} onSave={(v) => handleSave('summarizer', v)} />
                 <CoverConfig saving={saving} onSave={(v) => handleSave('cover', v)} />
+                <CheckerConfig saving={saving} onSave={(v) => handleSave('checker', v)} />
+                <SubtitleConfig saving={saving} onSave={(v) => handleSave('subtitle', v)} />
                 <MediaLibraryConfig />
               </Space>
             ),
@@ -925,6 +1357,7 @@ export default function Config() {
             children: (
               <Space direction="vertical" size="middle" style={{ width: '100%' }}>
                 <CrawlerConfig saving={saving} onSave={handleSave} />
+                <TranslateModelConfig />
                 <TranslatorConfig saving={saving} onSave={(v) => handleSave('translator', v)} />
               </Space>
             ),
