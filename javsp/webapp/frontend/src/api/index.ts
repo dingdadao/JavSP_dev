@@ -278,3 +278,28 @@ export async function fetchSubtitleAudioTracks(path: string) {
   const { data } = await api.get('/subtitle/audio-tracks', { params: { path } })
   return data
 }
+
+export async function searchSubtitle(video_path: string) {
+  const { data } = await api.post('/subtitle/search', { video_path })
+  return data
+}
+
+export async function batchSearchSubtitles(files: any[]) {
+  const { data } = await api.post('/subtitle/batch_search', { files })
+  return data
+}
+
+export async function downloadSubtitle(params: { video_path: string; video_dir: string; video_basename: string; subtitle_result: any }) {
+  const { data } = await api.post('/subtitle/download', params)
+  return data
+}
+
+export async function batchDeleteAudio(files: any[]) {
+  const { data } = await api.post('/subtitle/batch_delete_audio', { files })
+  return data
+}
+
+export async function batchDeleteSubtitle(files: any[]) {
+  const { data } = await api.post('/subtitle/batch_delete_subtitle', { files })
+  return data
+}

@@ -2,18 +2,21 @@ import { useState, useCallback, useEffect, useMemo } from 'react'
 import {
   Card, Button, Space, Typography, Table, Tag, Input,
   Modal, App, Empty, Alert, Tooltip, Popconfirm, Tabs, Progress,
+  Radio,
 } from 'antd'
 import {
   FolderOutlined, SoundOutlined,
   DeleteOutlined, ReloadOutlined,
   SearchOutlined, StopOutlined,
   FileTextOutlined, WarningOutlined,
+  AudioOutlined,
 } from '@ant-design/icons'
 import {
   fetchSubtitlePlatform, fetchSubtitleTasks, fetchSubtitleTaskDetail,
   scanSubtitleMedia, fetchSubtitleScanResults, startSubtitleTask, stopSubtitleTask,
   generateSubtitle, generateSubtitleForVideo, deleteSubtitleTask, regenerateSubtitle,
-  deleteSubtitleAudio, fetchConfig,
+  deleteSubtitleAudio, fetchConfig, searchSubtitle, batchSearchSubtitles, downloadSubtitle,
+  batchDeleteAudio, batchDeleteSubtitle,
 } from '../api'
 import { useSocket } from '../hooks/useSocket'
 
@@ -39,6 +42,23 @@ const SUBTITLE_STATUS: Record<string, { color: string; label: string }> = {
   done: { color: 'success', label: '已完成' },
   error: { color: 'error', label: '失败' },
 }
+
+const SEARCH_STATUS: Record<string, { color: string; label: string }> = {
+  pending: { color: 'default', label: '待搜索' },
+  searching: { color: 'processing', label: '搜索中' },
+  found: { color: 'success', label: '有结果' },
+  not_found: { color: 'warning', label: '无结果' },
+  error: { color: 'error', label: '搜索失败' },
+}
+
+const FILTER_OPTIONS = [
+  { value: 'all', label: '全部' },
+  { value: 'no_sub_no_audio', label: '无字幕无音轨' },
+  { value: 'has_sub_no_audio', label: '有字幕无音轨' },
+  { value: 'no_sub_has_audio', label: '无字幕有音轨' },
+  { value: 'has_sub_has_audio', label: '有字幕有音轨' },
+  { value: 'has_search', label: '搜索有结果' },
+]
 
 export default function SubtitleGenerator() {
   const { message } = App.useApp()
@@ -71,6 +91,18 @@ export default function SubtitleGenerator() {
 
   // Tab
   const [activeTab, setActiveTab] = useState('scan')
+
+  // 字幕搜索
+  const [searching, setSearching] = useState(false)
+  const [searchModalVisible, setSearchModalVisible] = useState(false)
+  const [currentSearchVideo, setCurrentSearchVideo] = useState<any>(null)
+  const [currentSearchResults, setCurrentSearchResults] = useState<any[]>([])
+  const [searchModalLoading, setSearchModalLoading] = useState(false)
+
+  // 筛选和批量操作
+  const [filterType, setFilterType] = useState('all')
+  const [batchDeletingAudio, setBatchDeletingAudio] = useState(false)
+  const [batchDeletingSubtitle, setBatchDeletingSubtitle] = useState(false)
 
   // 加载平台状态
   useEffect(() => {
@@ -323,6 +355,180 @@ export default function SubtitleGenerator() {
     })
   }, [taskItems, selectedRowKeys, selectedTask, message, loadTaskDetail])
 
+  // 搜索单个视频的字幕
+  const handleSearchSubtitle = useCallback(async (video: any) => {
+    setCurrentSearchVideo(video)
+    setCurrentSearchResults([])
+    setSearchModalVisible(true)
+    setSearchModalLoading(true)
+    try {
+      const res: any = await searchSubtitle(video.video_path || video.path)
+      if (res.code === 0) {
+        setCurrentSearchResults(res.data.results || [])
+      } else {
+        message.error(res.message)
+      }
+    } catch (e: any) {
+      message.error(e.response?.data?.message || '搜索失败')
+    } finally {
+      setSearchModalLoading(false)
+    }
+  }, [message])
+
+  // 批量搜索字幕
+  const handleBatchSearchSubtitles = useCallback(async () => {
+    if (selectedFileKeys.length === 0) {
+      message.warning('请先勾选要搜索字幕的视频文件')
+      return
+    }
+    setSearching(true)
+    try {
+      const files = scannedFiles.filter((f) => {
+        if (!selectedFileKeys.includes(f.video_path || f.path)) return false
+        if (f.local_subtitle_path || (f.subtitle_count && f.subtitle_count > 0)) return false
+        return true
+      })
+      if (files.length === 0) {
+        message.warning('所选文件均已有字幕，已跳过')
+        setSearching(false)
+        return
+      }
+      const skippedCount = selectedFileKeys.length - files.length
+      const res: any = await batchSearchSubtitles(files)
+      if (res.code === 0) {
+        const msg = skippedCount > 0
+          ? `批量搜索完成，搜索 ${res.data.total} 个文件，跳过 ${skippedCount} 个已有字幕的文件`
+          : `批量搜索完成，共搜索 ${res.data.total} 个文件`
+        message.success(msg)
+        fetchSubtitleScanResults(scanPath.trim()).then((r: any) => {
+          if (r.code === 0) setScannedFiles(r.data.files)
+        }).catch(() => {})
+      } else {
+        message.error(res.message)
+      }
+    } catch (e: any) {
+      message.error(e.response?.data?.message || '批量搜索失败')
+    } finally {
+      setSearching(false)
+    }
+  }, [selectedFileKeys, scannedFiles, scanPath, message])
+
+  // 下载选中的字幕
+  const handleDownloadSubtitle = useCallback(async (subtitleResult: any) => {
+    if (!currentSearchVideo) return
+    setSearchModalLoading(true)
+    try {
+      const videoPath = currentSearchVideo.video_path || currentSearchVideo.path
+      const videoDir = currentSearchVideo.video_dir || currentSearchVideo.dir
+      const videoBasename = currentSearchVideo.video_basename || currentSearchVideo.basename
+      const res: any = await downloadSubtitle({
+        video_path: videoPath,
+        video_dir: videoDir,
+        video_basename: videoBasename,
+        subtitle_result: subtitleResult,
+      })
+      if (res.code === 0) {
+        message.success(`字幕下载成功: ${subtitleResult.source === 'xunlei' ? '迅雷' : '射手网'}`)
+        setSearchModalVisible(false)
+        fetchSubtitleScanResults(scanPath.trim()).then((r: any) => {
+          if (r.code === 0) setScannedFiles(r.data.files)
+        }).catch(() => {})
+      } else {
+        message.error(res.message)
+      }
+    } catch (e: any) {
+      message.error(e.response?.data?.message || '下载失败')
+    } finally {
+      setSearchModalLoading(false)
+    }
+  }, [currentSearchVideo, scanPath, message])
+
+  // 批量删除音轨
+  const handleBatchDeleteAudio = useCallback(async () => {
+    if (selectedFileKeys.length === 0) {
+      message.warning('请先勾选要删除音轨的视频文件')
+      return
+    }
+    setBatchDeletingAudio(true)
+    try {
+      const files = scannedFiles.filter((f) => selectedFileKeys.includes(f.video_path || f.path))
+      const res: any = await batchDeleteAudio(files)
+      if (res.code === 0) {
+        message.success(`批量删除音轨完成: 删除 ${res.data.deleted} 个, 跳过 ${res.data.skipped} 个, 失败 ${res.data.failed} 个`)
+        fetchSubtitleScanResults(scanPath.trim()).then((r: any) => {
+          if (r.code === 0) setScannedFiles(r.data.files)
+        }).catch(() => {})
+      } else {
+        message.error(res.message)
+      }
+    } catch (e: any) {
+      message.error(e.response?.data?.message || '批量删除失败')
+    } finally {
+      setBatchDeletingAudio(false)
+    }
+  }, [selectedFileKeys, scannedFiles, scanPath, message])
+
+  // 批量删除字幕
+  const handleBatchDeleteSubtitle = useCallback(async () => {
+    if (selectedFileKeys.length === 0) {
+      message.warning('请先勾选要删除字幕的视频文件')
+      return
+    }
+    setBatchDeletingSubtitle(true)
+    try {
+      const files = scannedFiles.filter((f) => selectedFileKeys.includes(f.video_path || f.path))
+      const res: any = await batchDeleteSubtitle(files)
+      if (res.code === 0) {
+        message.success(`批量删除字幕完成: 删除 ${res.data.deleted} 个, 跳过 ${res.data.skipped} 个, 失败 ${res.data.failed} 个`)
+        fetchSubtitleScanResults(scanPath.trim()).then((r: any) => {
+          if (r.code === 0) setScannedFiles(r.data.files)
+        }).catch(() => {})
+      } else {
+        message.error(res.message)
+      }
+    } catch (e: any) {
+      message.error(e.response?.data?.message || '批量删除失败')
+    } finally {
+      setBatchDeletingSubtitle(false)
+    }
+  }, [selectedFileKeys, scannedFiles, scanPath, message])
+
+  // 筛选逻辑
+  const filteredFiles = useMemo(() => {
+    if (filterType === 'all') return scannedFiles
+    
+    return scannedFiles.filter((file) => {
+      const hasSub = file.local_subtitle_path || (file.subtitle_count && file.subtitle_count > 0) || (file.search_results && JSON.parse(file.search_results).length > 0)
+      const hasAudio = file.local_audio_path || file.extracted
+      
+      switch (filterType) {
+        case 'no_sub_no_audio':
+          return !hasSub && !hasAudio
+        case 'has_sub_no_audio':
+          return hasSub && !hasAudio
+        case 'no_sub_has_audio':
+          return !hasSub && hasAudio
+        case 'has_sub_has_audio':
+          return hasSub && hasAudio
+        case 'has_search':
+          return file.search_status === 'found'
+        default:
+          return true
+      }
+    })
+  }, [scannedFiles, filterType])
+
+  // 选中文件状态统计
+  const selectedStats = useMemo(() => {
+    const selected = scannedFiles.filter((f) => selectedFileKeys.includes(f.video_path || f.path))
+    return {
+      hasAudio: selected.some((f) => f.local_audio_path || f.extracted),
+      hasSub: selected.some((f) => f.local_subtitle_path || (f.subtitle_count && f.subtitle_count > 0)),
+      hasNoSubNoAudio: selected.some((f) => !f.local_subtitle_path && !f.local_audio_path && !f.extracted),
+      hasSearch: selected.some((f) => f.search_status === 'found'),
+    }
+  }, [selectedFileKeys, scannedFiles])
+
   const formatSize = (bytes: number) => {
     if (!bytes) return '-'
     let size = bytes
@@ -386,7 +592,7 @@ export default function SubtitleGenerator() {
   // 扫描结果表格列
   const fileColumns = [
     {
-      title: '状态', width: 120,
+      title: '状态', width: 150,
       render: (_: any, record: any) => (
         <Space>
           {record.file_exists === 0 ? (
@@ -396,8 +602,30 @@ export default function SubtitleGenerator() {
           ) : (
             <Tag>未提取</Tag>
           )}
+          {record.local_audio_path && <Tag color="blue"><AudioOutlined /> 音轨</Tag>}
+          {record.local_subtitle_path && <Tag color="green"><FileTextOutlined /> 字幕</Tag>}
+          {record.subtitle_count && record.subtitle_count > 1 && (
+            <Tag color="orange">{record.subtitle_count} 字幕</Tag>
+          )}
         </Space>
       ),
+    },
+    {
+      title: '字幕搜索', width: 120,
+      render: (_: any, record: any) => {
+        const status = record.search_status || 'pending'
+        const s = SEARCH_STATUS[status] || { color: 'default', label: status }
+        return (
+          <Space>
+            <Tag color={s.color}>{s.label}</Tag>
+            {record.search_results && JSON.parse(record.search_results).length > 0 && (
+              <Tag color="purple">
+                {JSON.parse(record.search_results).length} 条
+              </Tag>
+            )}
+          </Space>
+        )
+      },
     },
     {
       title: '文件名', dataIndex: 'video_basename', ellipsis: true,
@@ -414,6 +642,31 @@ export default function SubtitleGenerator() {
         const p = record.video_path || record.path
         return <Tooltip title={p}><Typography.Text ellipsis style={{ maxWidth: 300, fontFamily: 'monospace', fontSize: 11 }}>{p}</Typography.Text></Tooltip>
       },
+    },
+    {
+      title: '操作', width: 200,
+      render: (_: any, record: any) => (
+        <Space size={4}>
+          <Button
+            size="small"
+            icon={<SearchOutlined />}
+            onClick={() => handleSearchSubtitle(record)}
+            disabled={record.file_exists === 0 || searching}
+          >
+            搜索字幕
+          </Button>
+          {(record.search_status === 'found' || record.subtitle_count && record.subtitle_count > 1) && (
+            <Button
+              size="small"
+              type="primary"
+              icon={<FileTextOutlined />}
+              onClick={() => handleSearchSubtitle(record)}
+            >
+              选择字幕
+            </Button>
+          )}
+        </Space>
+      ),
     },
   ]
 
@@ -714,6 +967,13 @@ export default function SubtitleGenerator() {
               >
                 提取音轨 ({selectedFileKeys.length})
               </Button>
+              <Button
+                icon={<SearchOutlined />}
+                onClick={handleBatchSearchSubtitles}
+                loading={searching}
+              >
+                批量搜索字幕 ({selectedFileKeys.length})
+              </Button>
             </Space.Compact>
           </Card>
 
@@ -730,13 +990,73 @@ export default function SubtitleGenerator() {
               }
               extra={
                 <Space>
-                  <Button size="small" onClick={() => setSelectedFileKeys(scannedFiles.filter((f) => f.file_exists !== 0).map((f) => f.video_path || f.path))}>全选可用</Button>
+                  <Radio.Group
+                    value={filterType}
+                    onChange={(e) => setFilterType(e.target.value)}
+                    buttonStyle="solid"
+                    size="small"
+                  >
+                    {FILTER_OPTIONS.map((opt) => (
+                      <Radio.Button key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </Radio.Button>
+                    ))}
+                  </Radio.Group>
+                  <Button size="small" onClick={() => setSelectedFileKeys(filteredFiles.filter((f) => f.file_exists !== 0).map((f) => f.video_path || f.path))}>全选可用</Button>
                   <Button size="small" onClick={() => setSelectedFileKeys([])}>取消全选</Button>
                 </Space>
               }
             >
+              {selectedFileKeys.length > 0 && (
+                <Card
+                  variant="outlined"
+                  size="small"
+                  style={{ marginBottom: 16 }}
+                >
+                  <Space wrap>
+                    <Button
+                      size="small"
+                      type="primary"
+                      icon={<SoundOutlined />}
+                      onClick={handleStartAudio}
+                      loading={starting}
+                      disabled={platform && !platform.supported}
+                    >
+                      批量提取音轨 ({selectedFileKeys.length})
+                    </Button>
+                    <Button
+                      size="small"
+                      icon={<SearchOutlined />}
+                      onClick={handleBatchSearchSubtitles}
+                      loading={searching}
+                    >
+                      批量搜索字幕 ({selectedFileKeys.length})
+                    </Button>
+                    <Button
+                      size="small"
+                      icon={<AudioOutlined />}
+                      onClick={handleBatchDeleteAudio}
+                      loading={batchDeletingAudio}
+                      disabled={!selectedStats.hasAudio}
+                      danger
+                    >
+                      批量删除音轨
+                    </Button>
+                    <Button
+                      size="small"
+                      icon={<FileTextOutlined />}
+                      onClick={handleBatchDeleteSubtitle}
+                      loading={batchDeletingSubtitle}
+                      disabled={!selectedStats.hasSub}
+                      danger
+                    >
+                      批量删除字幕
+                    </Button>
+                  </Space>
+                </Card>
+              )}
               <Table
-                dataSource={scannedFiles}
+                dataSource={filteredFiles}
                 columns={fileColumns}
                 rowKey={(record: any) => record.video_path || record.path}
                 size="small"
@@ -862,6 +1182,87 @@ export default function SubtitleGenerator() {
 
         <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
       </Space>
+
+      {/* 字幕搜索结果弹窗 */}
+      <Modal
+        title={`字幕搜索 - ${currentSearchVideo?.video_basename || currentSearchVideo?.basename || ''}`}
+        open={searchModalVisible}
+        onCancel={() => setSearchModalVisible(false)}
+        footer={null}
+        width={700}
+        loading={searchModalLoading}
+      >
+        {currentSearchResults.length > 0 ? (
+          <Space direction="vertical" style={{ width: '100%' }} size="middle">
+            <Alert
+              type="success"
+              message={`搜索到 ${currentSearchResults.length} 条字幕结果`}
+              description="请选择要下载的字幕，下载后将保存为与视频同名的 .srt 文件"
+              showIcon
+            />
+            <Table
+              dataSource={currentSearchResults}
+              rowKey="id"
+              size="small"
+              pagination={false}
+              columns={[
+                {
+                  title: '来源', width: 80,
+                  render: (_: any, record: any) => (
+                    <Tag color={record.source === 'xunlei' ? 'blue' : 'green'}>
+                      {record.source === 'xunlei' ? '迅雷' : '射手网'}
+                    </Tag>
+                  ),
+                },
+                {
+                  title: '语言', width: 80,
+                  render: (_: any, record: any) => <Tag>{record.language}</Tag>,
+                },
+                {
+                  title: '文件名', dataIndex: 'filename', ellipsis: true,
+                },
+                {
+                  title: '编码', width: 80, dataIndex: 'encoding',
+                },
+                {
+                  title: '操作', width: 100,
+                  render: (_: any, record: any) => (
+                    <Button
+                      size="small"
+                      type="primary"
+                      onClick={() => handleDownloadSubtitle(record)}
+                      loading={searchModalLoading}
+                    >
+                      下载
+                    </Button>
+                  ),
+                },
+              ]}
+            />
+          </Space>
+        ) : (
+          <Space direction="vertical" style={{ width: '100%' }} size="middle">
+            <Alert
+              type="warning"
+              message="未搜索到字幕"
+              description="可以尝试通过提取音轨，使用 AI 大模型生成字幕"
+              showIcon
+            />
+            <Button
+              type="primary"
+              icon={<SoundOutlined />}
+              onClick={() => {
+                setSearchModalVisible(false)
+                setSelectedFileKeys([currentSearchVideo?.video_path || currentSearchVideo?.path])
+                handleStartAudio()
+              }}
+              disabled={platform && !platform.supported}
+            >
+              提取音轨生成字幕
+            </Button>
+          </Space>
+        )}
+      </Modal>
     </div>
   )
 }

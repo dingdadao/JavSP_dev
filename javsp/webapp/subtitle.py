@@ -991,6 +991,10 @@ def _filter_segments(segments: list, language: str = 'ja') -> tuple[list, int]:
     return filtered, removed_count
 
 
+SUBTITLE_EXTENSIONS = {'.srt', '.ass', '.ssa'}
+AUDIO_EXTENSIONS = {'.wav'}
+
+
 def scan_media_files(path: str, check_exists: bool = True) -> list:
     """扫描目录下的媒体文件。check_exists=True 时跳过不存在的文件"""
     from javsp.webapp.database import get_config
@@ -1011,11 +1015,24 @@ def scan_media_files(path: str, check_exists: bool = True) -> list:
             pass
 
     for dirpath, dirnames, filenames in os.walk(path):
-        # 跳过忽略的目录
         base = os.path.basename(dirpath)
         if any(r.search(base) for r in ignored_res):
             dirnames.clear()
             continue
+
+        dir_files = {}
+        for filename in filenames:
+            ext = os.path.splitext(filename)[1].lower()
+            stem = os.path.splitext(filename)[0]
+            filepath = os.path.join(dirpath, filename)
+            if ext in SUBTITLE_EXTENSIONS:
+                if stem not in dir_files:
+                    dir_files[stem] = {'subtitles': [], 'audio': None}
+                dir_files[stem]['subtitles'].append(filepath)
+            elif ext in AUDIO_EXTENSIONS:
+                if stem not in dir_files:
+                    dir_files[stem] = {'subtitles': [], 'audio': None}
+                dir_files[stem]['audio'] = filepath
 
         for filename in filenames:
             ext = os.path.splitext(filename)[1].lower()
@@ -1026,11 +1043,21 @@ def scan_media_files(path: str, check_exists: bool = True) -> list:
                 continue
             try:
                 fsize = os.path.getsize(filepath)
+                stem = os.path.splitext(filename)[0]
+                dir_info = dir_files.get(stem, {'subtitles': [], 'audio': None})
+                
+                local_subtitle_path = None
+                if dir_info['subtitles']:
+                    local_subtitle_path = dir_info['subtitles'][0]
+                
                 files.append({
                     'path': filepath,
                     'basename': filename,
                     'dir': dirpath,
                     'size': fsize,
+                    'local_subtitle_path': local_subtitle_path,
+                    'local_audio_path': dir_info['audio'],
+                    'subtitle_count': len(dir_info['subtitles']),
                 })
             except OSError:
                 continue
@@ -1525,3 +1552,152 @@ def delete_audio_files_for_items(item_ids: list) -> dict:
                     conn.execute("UPDATE subtitle_items SET audio_path = NULL, audio_status = 'pending' WHERE id = ?", (item_id,))
                     deleted.append(path)
     return {'deleted': deleted, 'failed': failed}
+
+
+# ==================== 字幕搜索 ====================
+
+def search_subtitle_for_video(video_path: str) -> dict:
+    """搜索单个视频的字幕（优先迅雷，然后射手网）"""
+    from javsp.webapp.subtitle_search import search_subtitle, search_xunlei_subtitle, search_shooter_subtitle
+    from javsp.webapp.database import update_subtitle_search_status
+    
+    if not os.path.exists(video_path):
+        return {'ok': False, 'errors': '视频文件不存在'}
+    
+    try:
+        update_subtitle_search_status(video_path, 'searching')
+        
+        xunlei_results = search_xunlei_subtitle(video_path)
+        shooter_results = []
+        
+        if not xunlei_results:
+            shooter_results = search_shooter_subtitle(video_path)
+        
+        all_results = []
+        seen_ids = set()
+        
+        for r in xunlei_results:
+            if r['id'] not in seen_ids:
+                seen_ids.add(r['id'])
+                all_results.append(r)
+        
+        for r in shooter_results:
+            if r['id'] not in seen_ids:
+                seen_ids.add(r['id'])
+                all_results.append(r)
+        
+        status = 'found' if all_results else 'not_found'
+        update_subtitle_search_status(video_path, status, all_results)
+        
+        logger.info(f"字幕搜索完成: {video_path} -> {len(all_results)} 条结果")
+        return {'ok': True, 'results': all_results, 'count': len(all_results)}
+    
+    except Exception as e:
+        logger.error(f"字幕搜索异常: {video_path} - {e}")
+        update_subtitle_search_status(video_path, 'error')
+        return {'ok': False, 'errors': str(e)}
+
+
+def batch_search_subtitles(files: list) -> dict:
+    """批量搜索字幕"""
+    success_count = 0
+    fail_count = 0
+    total_count = 0
+    
+    for f in files:
+        video_path = f.get('path') or f.get('video_path') or ''
+        if not video_path or not os.path.exists(video_path):
+            continue
+        
+        total_count += 1
+        result = search_subtitle_for_video(video_path)
+        if result['ok']:
+            success_count += 1
+        else:
+            fail_count += 1
+    
+    return {'ok': True, 'total': total_count, 'success': success_count, 'failed': fail_count}
+
+
+def download_selected_subtitle(video_path: str, video_dir: str, video_basename: str, subtitle_result: dict) -> dict:
+    """下载选中的字幕文件，保持与大模型生成一致的命名规则"""
+    from javsp.webapp.subtitle_search import download_subtitle
+    
+    if not os.path.exists(video_path):
+        return {'ok': False, 'errors': '视频文件不存在'}
+    
+    try:
+        stem = Path(video_basename).stem
+        fmt = 'srt'
+        save_path = os.path.join(video_dir, f"{stem}.{fmt}")
+        
+        result = download_subtitle(subtitle_result['url'], save_path)
+        
+        if result['ok']:
+            logger.info(f"字幕下载成功: {video_basename} -> {result['path']}")
+            return {
+                'ok': True,
+                'subtitle_path': result['path'],
+                'source': subtitle_result['source'],
+                'language': subtitle_result['language'],
+            }
+        else:
+            return {'ok': False, 'errors': result['errors']}
+    
+    except Exception as e:
+        logger.error(f"下载字幕异常: {video_path} - {e}")
+        return {'ok': False, 'errors': str(e)}
+
+
+def batch_delete_audio(files: list) -> dict:
+    """批量删除音轨文件"""
+    deleted = 0
+    skipped = 0
+    failed = 0
+    
+    for f in files:
+        audio_path = f.get('local_audio_path') or f.get('audio_path')
+        if not audio_path:
+            skipped += 1
+            continue
+        
+        if not os.path.exists(audio_path):
+            skipped += 1
+            continue
+        
+        try:
+            os.remove(audio_path)
+            deleted += 1
+            logger.info(f"音轨文件已删除: {audio_path}")
+        except Exception as e:
+            failed += 1
+            logger.error(f"删除音轨文件失败: {audio_path} - {e}")
+    
+    return {'ok': True, 'deleted': deleted, 'skipped': skipped, 'failed': failed}
+
+
+def batch_delete_subtitle(files: list) -> dict:
+    """批量删除字幕文件"""
+    deleted = 0
+    skipped = 0
+    failed = 0
+    
+    for f in files:
+        subtitle_path = f.get('local_subtitle_path')
+        if not subtitle_path:
+            skipped += 1
+            continue
+        
+        if not os.path.exists(subtitle_path):
+            skipped += 1
+            continue
+        
+        try:
+            os.remove(subtitle_path)
+            deleted += 1
+            logger.info(f"字幕文件已删除: {subtitle_path}")
+        except Exception as e:
+            failed += 1
+            logger.error(f"删除字幕文件失败: {subtitle_path} - {e}")
+    
+    return {'ok': True, 'deleted': deleted, 'skipped': skipped, 'failed': failed}

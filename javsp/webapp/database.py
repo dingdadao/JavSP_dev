@@ -191,6 +191,11 @@ def init_db():
                 file_size INTEGER DEFAULT 0,
                 file_exists INTEGER NOT NULL DEFAULT 1,
                 extracted INTEGER NOT NULL DEFAULT 0,
+                search_status TEXT NOT NULL DEFAULT 'pending',
+                search_results TEXT,
+                local_subtitle_path TEXT,
+                local_audio_path TEXT,
+                subtitle_count INTEGER DEFAULT 0,
                 scanned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(scan_path, video_path)
             );
@@ -230,6 +235,16 @@ def init_db():
             conn.execute("ALTER TABLE subtitle_scan_results ADD COLUMN file_exists INTEGER NOT NULL DEFAULT 1")
         if 'extracted' not in cols_scan:
             conn.execute("ALTER TABLE subtitle_scan_results ADD COLUMN extracted INTEGER NOT NULL DEFAULT 0")
+        if 'search_status' not in cols_scan:
+            conn.execute("ALTER TABLE subtitle_scan_results ADD COLUMN search_status TEXT NOT NULL DEFAULT 'pending'")
+        if 'search_results' not in cols_scan:
+            conn.execute("ALTER TABLE subtitle_scan_results ADD COLUMN search_results TEXT")
+        if 'local_subtitle_path' not in cols_scan:
+            conn.execute("ALTER TABLE subtitle_scan_results ADD COLUMN local_subtitle_path TEXT")
+        if 'local_audio_path' not in cols_scan:
+            conn.execute("ALTER TABLE subtitle_scan_results ADD COLUMN local_audio_path TEXT")
+        if 'subtitle_count' not in cols_scan:
+            conn.execute("ALTER TABLE subtitle_scan_results ADD COLUMN subtitle_count INTEGER DEFAULT 0")
 
         # 服务重启后，内存中的 stop_event 丢失，旧 running 状态的任务无法继续/停止，统一重置为 stopped
         conn.execute(
@@ -964,24 +979,31 @@ def delete_subtitle_items(item_ids: list):
 # ==================== 字幕扫描结果 ====================
 
 def save_subtitle_scan_results(scan_path: str, files: list):
-    """保存扫描结果，保留已提取状态"""
+    """保存扫描结果，保留已提取状态和搜索状态"""
     with get_db() as conn:
-        old_extracted = {}
+        old_status = {}
         rows = conn.execute(
-            "SELECT video_path, extracted FROM subtitle_scan_results WHERE scan_path = ?",
+            "SELECT video_path, extracted, search_status, search_results, local_subtitle_path, local_audio_path, subtitle_count FROM subtitle_scan_results WHERE scan_path = ?",
             (scan_path,)
         ).fetchall()
         for row in rows:
-            old_extracted[row['video_path']] = row['extracted']
+            old_status[row['video_path']] = {
+                'extracted': row['extracted'],
+                'search_status': row['search_status'],
+                'search_results': row['search_results'],
+                'local_subtitle_path': row['local_subtitle_path'],
+                'local_audio_path': row['local_audio_path'],
+                'subtitle_count': row['subtitle_count'],
+            }
         
         conn.execute("DELETE FROM subtitle_scan_results WHERE scan_path = ?", (scan_path,))
         for f in files:
             video_path = f['path']
-            extracted = old_extracted.get(video_path, 0)
+            prev = old_status.get(video_path, {})
             conn.execute("""
-                INSERT INTO subtitle_scan_results (scan_path, video_path, video_basename, video_dir, file_size, file_exists, extracted)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (scan_path, video_path, f['basename'], f['dir'], f['size'], 1 if f.get('exists', True) else 0, extracted))
+                INSERT INTO subtitle_scan_results (scan_path, video_path, video_basename, video_dir, file_size, file_exists, extracted, search_status, search_results, local_subtitle_path, local_audio_path, subtitle_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (scan_path, video_path, f['basename'], f['dir'], f['size'], 1 if f.get('exists', True) else 0, prev.get('extracted', 0), prev.get('search_status', 'pending'), prev.get('search_results'), f.get('local_subtitle_path'), f.get('local_audio_path'), f.get('subtitle_count', 0)))
 
 
 def get_subtitle_scan_results(scan_path: str) -> list:
@@ -1028,3 +1050,42 @@ def refresh_subtitle_scan_extracted_status():
                 SELECT DISTINCT video_path FROM subtitle_items WHERE audio_status = 'done'
             )
         """)
+
+
+# ==================== 字幕搜索结果 ====================
+
+def update_subtitle_search_status(video_path: str, status: str, results: list = None):
+    """更新字幕搜索状态和结果"""
+    results_json = json.dumps(results, ensure_ascii=False) if results else None
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE subtitle_scan_results SET search_status = ?, search_results = ? WHERE video_path = ?",
+            (status, results_json, video_path)
+        )
+
+
+def get_subtitle_search_results(video_path: str) -> list:
+    """获取某视频的字幕搜索结果"""
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT search_results FROM subtitle_scan_results WHERE video_path = ?",
+            (video_path,)
+        ).fetchone()
+        if row and row['search_results']:
+            try:
+                return json.loads(row['search_results'])
+            except json.JSONDecodeError:
+                return []
+        return []
+
+
+def reset_subtitle_search_status(scan_path: str = None):
+    """重置字幕搜索状态为 pending"""
+    with get_db() as conn:
+        if scan_path:
+            conn.execute(
+                "UPDATE subtitle_scan_results SET search_status = 'pending', search_results = NULL WHERE scan_path = ?",
+                (scan_path,)
+            )
+        else:
+            conn.execute("UPDATE subtitle_scan_results SET search_status = 'pending', search_results = NULL")

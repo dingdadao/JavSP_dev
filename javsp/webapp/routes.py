@@ -936,3 +936,80 @@ def register_routes(app, socketio: SocketIO):
             return jsonify({'code': 0, 'data': tracks})
         except Exception as e:
             return jsonify({'code': 500, 'message': str(e)}), 500
+
+    @app.route('/api/subtitle/search', methods=['POST'])
+    def api_subtitle_search():
+        """搜索单个视频的字幕（优先迅雷，然后射手网）"""
+        try:
+            data = request.get_json() or {}
+            video_path = data.get('video_path')
+            if not video_path:
+                return jsonify({'code': 400, 'message': '缺少 video_path'}), 400
+            from javsp.webapp.subtitle import search_subtitle_for_video
+            result = search_subtitle_for_video(video_path)
+            if not result['ok']:
+                return jsonify({'code': 400, 'message': result['errors']}), 400
+            return jsonify({'code': 0, 'data': {'results': result['results'], 'count': result['count']}})
+        except Exception as e:
+            return jsonify({'code': 500, 'message': str(e)}), 500
+
+    @app.route('/api/subtitle/batch_search', methods=['POST'])
+    def api_subtitle_batch_search():
+        """批量搜索字幕"""
+        try:
+            data = request.get_json() or {}
+            files = data.get('files', [])
+            if not files:
+                return jsonify({'code': 400, 'message': '缺少文件列表'}), 400
+            from javsp.webapp.subtitle import batch_search_subtitles
+            result = batch_search_subtitles(files)
+            return jsonify({'code': 0, 'data': result})
+        except Exception as e:
+            return jsonify({'code': 500, 'message': str(e)}), 500
+
+    @app.route('/api/subtitle/download', methods=['POST'])
+    def api_subtitle_download():
+        """下载选中的字幕文件"""
+        try:
+            data = request.get_json() or {}
+            video_path = data.get('video_path')
+            video_dir = data.get('video_dir')
+            video_basename = data.get('video_basename')
+            subtitle_result = data.get('subtitle_result')
+            if not video_path or not subtitle_result:
+                return jsonify({'code': 400, 'message': '缺少必要参数'}), 400
+            from javsp.webapp.subtitle import download_selected_subtitle
+            result = download_selected_subtitle(video_path, video_dir, video_basename, subtitle_result)
+            if not result['ok']:
+                return jsonify({'code': 400, 'message': result['errors']}), 400
+            return jsonify({'code': 0, 'data': result})
+        except Exception as e:
+            return jsonify({'code': 500, 'message': str(e)}), 500
+
+    @app.route('/api/subtitle/batch_delete_audio', methods=['POST'])
+    def api_subtitle_batch_delete_audio():
+        """批量删除音轨文件"""
+        try:
+            data = request.get_json() or {}
+            files = data.get('files', [])
+            if not files:
+                return jsonify({'code': 400, 'message': '缺少文件列表'}), 400
+            from javsp.webapp.subtitle import batch_delete_audio
+            result = batch_delete_audio(files)
+            return jsonify({'code': 0, 'data': result})
+        except Exception as e:
+            return jsonify({'code': 500, 'message': str(e)}), 500
+
+    @app.route('/api/subtitle/batch_delete_subtitle', methods=['POST'])
+    def api_subtitle_batch_delete_subtitle():
+        """批量删除字幕文件"""
+        try:
+            data = request.get_json() or {}
+            files = data.get('files', [])
+            if not files:
+                return jsonify({'code': 400, 'message': '缺少文件列表'}), 400
+            from javsp.webapp.subtitle import batch_delete_subtitle
+            result = batch_delete_subtitle(files)
+            return jsonify({'code': 0, 'data': result})
+        except Exception as e:
+            return jsonify({'code': 500, 'message': str(e)}), 500
