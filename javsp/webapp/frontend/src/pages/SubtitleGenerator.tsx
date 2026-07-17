@@ -563,31 +563,8 @@ export default function SubtitleGenerator() {
     return map
   }, [taskItems])
 
-  // 不支持平台时显示
-  if (platform && !platform.supported) {
-    return (
-      <div>
-        <Typography.Title level={4} style={{ marginBottom: 24 }}>
-          <SoundOutlined /> 字幕生成
-        </Typography.Title>
-        <Card variant="borderless">
-          <Alert
-            type="warning"
-            showIcon
-            icon={<WarningOutlined />}
-            message="当前平台不支持字幕生成功能"
-            description={
-              <div>
-                <p>平台: {platform.platform} ({platform.arch})</p>
-                <p>原因: {platform.reason}</p>
-                <p>字幕生成功能需要 Mac Apple Silicon (M1/M2/M3/M4) 并安装 mlx-whisper。</p>
-              </div>
-            }
-          />
-        </Card>
-      </div>
-    )
-  }
+  // 平台不支持时的警告提示（不再完全屏蔽，保留字幕搜索下载功能）
+  const showPlatformWarning = platform && !platform.supported
 
   // 扫描结果表格列
   const fileColumns = [
@@ -1178,6 +1155,24 @@ export default function SubtitleGenerator() {
               )}
             </Space>
           </Card>
+        )}
+
+        {showPlatformWarning && (
+          <Alert
+            type="warning"
+            showIcon
+            icon={<WarningOutlined />}
+            message="当前平台不支持AI字幕生成"
+            description={
+              <div>
+                <p>平台: {platform.platform} ({platform.arch})</p>
+                <p>原因: {platform.reason}</p>
+                <p>AI字幕生成功能需要 Mac Apple Silicon (M1/M2/M3/M4) 并安装 mlx-whisper。</p>
+                <p>您仍可以使用字幕搜索和下载功能。</p>
+              </div>
+            }
+            style={{ marginBottom: 16 }}
+          />
         )}
 
         <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
