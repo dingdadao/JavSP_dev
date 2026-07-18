@@ -353,6 +353,12 @@ def seed_default_config():
         ('subtitle', 'delete_audio_after', 'false', 'bool', '生成字幕后删除音轨文件', 'false'),
         ('subtitle', 'segment_duration', '30', 'int', '语音分段时长（秒），用于大模型上下文限制', '30'),
         ('subtitle', 'filter_fillers', 'false', 'bool', '过滤语气词和拟声词（如ああ、ははは等）', 'false'),
+
+        # 字幕搜索配置
+        ('subtitle', 'subtitle_search_xunlei_api_url', 'https://api-shoulei-ssl.xunlei.com/oracle/subtitle', 'str', '迅雷字幕搜索 API 地址（留空使用默认）', 'https://api-shoulei-ssl.xunlei.com/oracle/subtitle'),
+        ('subtitle', 'subtitle_search_shooter_api_url', 'https://www.shooter.cn/api/subapi.php', 'str', '射手网字幕搜索 API 地址（留空使用默认）', 'https://www.shooter.cn/api/subapi.php'),
+        ('subtitle', 'subtitle_search_preferred_languages', json.dumps(['zh', 'cht', 'en']), 'json', '字幕语言偏好顺序（如 zh/cht/en/jp，排在前面的优先下载）', json.dumps(['zh', 'cht', 'en'])),
+        ('subtitle', 'auto_download_subtitle', 'true', 'bool', '刮削完成后自动下载字幕', 'true'),
     ]
 
     with get_db() as conn:
@@ -367,9 +373,21 @@ def seed_default_config():
 
 def migrate_config():
     """迁移：为已有数据库补充新增的配置项"""
+    # 移除已废弃的字幕搜索 API URL 配置项
+    with get_db() as conn:
+        conn.execute(
+            'DELETE FROM config WHERE group_name = ? AND key_name IN (?, ?)',
+            ('subtitle', 'xunlei_api_url', 'shooter_api_url')
+        )
+        conn.commit()
+
     migrations = [
         ('scanner', 'check_file_integrity', 'true', 'bool', '刮削前使用 ffmpeg 检查视频文件完整性', 'true'),
         ('checker', 'scan_path', '', 'str', '文件检查器默认扫描路径', ''),
+        ('subtitle', 'subtitle_search_xunlei_api_url', 'https://api-shoulei-ssl.xunlei.com/oracle/subtitle', 'str', '迅雷字幕搜索 API 地址（留空使用默认）', 'https://api-shoulei-ssl.xunlei.com/oracle/subtitle'),
+        ('subtitle', 'subtitle_search_shooter_api_url', 'https://www.shooter.cn/api/subapi.php', 'str', '射手网字幕搜索 API 地址（留空使用默认）', 'https://www.shooter.cn/api/subapi.php'),
+        ('subtitle', 'subtitle_search_preferred_languages', json.dumps(['zh', 'cht', 'en']), 'json', '字幕语言偏好顺序（如 zh/cht/en/jp，排在前面的优先下载）', json.dumps(['zh', 'cht', 'en'])),
+        ('subtitle', 'auto_download_subtitle', 'true', 'bool', '刮削完成后自动下载字幕', 'true'),
     ]
     with get_db() as conn:
         for group, key, value, vtype, desc, default in migrations:
@@ -926,6 +944,16 @@ def get_pending_subtitle_items_by_video(task_id: str, video_path: str, phase: st
         return [dict(r) for r in rows]
 
 
+def get_subtitle_task_items_by_video(video_path: str) -> list:
+    """获取指定影片在所有任务中的音轨/字幕项"""
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM subtitle_items WHERE video_path = ? ORDER BY id",
+            (video_path,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 def update_subtitle_item(item_id: int, **kwargs):
     with get_db() as conn:
         allowed = {'audio_path', 'audio_status', 'audio_duration', 'audio_started_at', 'audio_finished_at',
@@ -1025,6 +1053,15 @@ def update_subtitle_scan_result_exists(video_path: str, exists: bool):
         )
 
 
+def update_subtitle_scan_local_subtitles(video_path: str, local_subtitle_path: str | None, subtitle_count: int = 0):
+    """更新扫描结果中的本地字幕路径和数量（下载/删除后同步缓存）"""
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE subtitle_scan_results SET local_subtitle_path = ?, subtitle_count = ? WHERE video_path = ?",
+            (local_subtitle_path, subtitle_count, video_path)
+        )
+
+
 def delete_subtitle_scan_result(video_path: str):
     """删除单条扫描结果"""
     with get_db() as conn:
@@ -1041,7 +1078,7 @@ def update_subtitle_scan_result_extracted(video_path: str, extracted: bool):
 
 
 def refresh_subtitle_scan_extracted_status():
-    """根据 subtitle_items 中的成功记录，刷新扫描结果的 extracted 状态"""
+    """根据 subtitle_items 中的成功记录，刷新扫描结果的 extracted 状态和本地音轨路径"""
     with get_db() as conn:
         conn.execute("""
             UPDATE subtitle_scan_results
@@ -1050,6 +1087,17 @@ def refresh_subtitle_scan_extracted_status():
                 SELECT DISTINCT video_path FROM subtitle_items WHERE audio_status = 'done'
             )
         """)
+        # 同步更新 local_audio_path，避免批量删除音轨时找不到路径
+        rows = conn.execute("""
+            SELECT video_path, audio_path FROM subtitle_items
+            WHERE audio_status = 'done' AND audio_path IS NOT NULL AND audio_path != ''
+            GROUP BY video_path
+        """).fetchall()
+        for row in rows:
+            conn.execute(
+                "UPDATE subtitle_scan_results SET local_audio_path = ? WHERE video_path = ?",
+                (row['audio_path'], row['video_path'])
+            )
 
 
 # ==================== 字幕搜索结果 ====================

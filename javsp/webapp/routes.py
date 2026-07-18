@@ -33,6 +33,7 @@ logger = logging.getLogger('javsp.webapp.routes')
 # 全局任务状态
 _current_task_lock = threading.Lock()
 _current_task_thread = None
+_current_task_id = None
 
 
 def register_routes(app, socketio: SocketIO):
@@ -138,6 +139,8 @@ def register_routes(app, socketio: SocketIO):
             translate = data.get('translate', True)
             move_files = data.get('move_files', get_config('summarizer').get('summarizer', {}).get('move_files', True))
 
+            global _current_task_id
+            _current_task_id = task_id
             _current_task_thread = threading.Thread(
                 target=run_scrape_task,
                 args=(task_id, str(source_path), str(dest_path), translate, move_files, socketio),
@@ -166,13 +169,35 @@ def register_routes(app, socketio: SocketIO):
     @app.route('/api/scrape/stop', methods=['POST'])
     def api_stop_scrape():
         """停止当前刮削任务"""
+        global _current_task_thread, _current_task_id
         try:
             with _current_task_lock:
                 if not _current_task_thread or not _current_task_thread.is_alive():
                     return jsonify({'code': 0, 'message': '当前无运行中的任务'})
+                task_id = _current_task_id
+
             request_stop()
-            add_log('INFO', 'scraper', '请求停止刮削任务')
-            return jsonify({'code': 0, 'message': '已发送停止信号'})
+            add_log('INFO', 'scraper', f'请求停止刮削任务 {task_id[:8] if task_id else ""}')
+
+            # 等待任务线程在合理时间内自行结束
+            _current_task_thread.join(timeout=10)
+            if _current_task_thread.is_alive():
+                # 仍在执行不可中断的操作，先把数据库状态标记为 stopped，并释放全局引用让新任务可以开始
+                if task_id:
+                    update_task(task_id, status='stopped', finished_at=time.strftime('%Y-%m-%d %H:%M:%S'))
+                    socketio.emit('task_progress', {
+                        'task_id': task_id, 'status': 'stopped',
+                        'message': '任务已停止（当前操作完成后完全退出）'
+                    })
+                with _current_task_lock:
+                    _current_task_thread = None
+                    _current_task_id = None
+                return jsonify({'code': 0, 'message': '已发送停止信号，当前操作完成后任务将完全停止'})
+
+            with _current_task_lock:
+                _current_task_thread = None
+                _current_task_id = None
+            return jsonify({'code': 0, 'message': '任务已停止'})
         except Exception as e:
             return jsonify({'code': 500, 'message': str(e)}), 500
 
@@ -969,19 +994,33 @@ def register_routes(app, socketio: SocketIO):
 
     @app.route('/api/subtitle/download', methods=['POST'])
     def api_subtitle_download():
-        """下载选中的字幕文件"""
+        """下载选中的字幕文件；如不传 subtitle_result，则按语言偏好自动匹配最佳字幕"""
         try:
             data = request.get_json() or {}
             video_path = data.get('video_path')
             video_dir = data.get('video_dir')
             video_basename = data.get('video_basename')
             subtitle_result = data.get('subtitle_result')
-            if not video_path or not subtitle_result:
+            if not video_path:
                 return jsonify({'code': 400, 'message': '缺少必要参数'}), 400
             from javsp.webapp.subtitle import download_selected_subtitle
             result = download_selected_subtitle(video_path, video_dir, video_basename, subtitle_result)
             if not result['ok']:
                 return jsonify({'code': 400, 'message': result['errors']}), 400
+            return jsonify({'code': 0, 'data': result})
+        except Exception as e:
+            return jsonify({'code': 500, 'message': str(e)}), 500
+
+    @app.route('/api/subtitle/batch_download', methods=['POST'])
+    def api_subtitle_batch_download():
+        """批量下载字幕：已有字幕跳过，匹配偏好语言自动下载，未匹配返回手动选择"""
+        try:
+            data = request.get_json() or {}
+            files = data.get('files', [])
+            if not files:
+                return jsonify({'code': 400, 'message': '缺少文件列表'}), 400
+            from javsp.webapp.subtitle import batch_download_subtitles
+            result = batch_download_subtitles(files)
             return jsonify({'code': 0, 'data': result})
         except Exception as e:
             return jsonify({'code': 500, 'message': str(e)}), 500

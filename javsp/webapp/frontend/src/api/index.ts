@@ -289,8 +289,13 @@ export async function batchSearchSubtitles(files: any[]) {
   return data
 }
 
-export async function downloadSubtitle(params: { video_path: string; video_dir: string; video_basename: string; subtitle_result: any }) {
+export async function downloadSubtitle(params: { video_path: string; video_dir: string; video_basename: string; subtitle_result?: any }) {
   const { data } = await api.post('/subtitle/download', params)
+  return data
+}
+
+export async function batchDownloadSubtitles(files: any[]) {
+  const { data } = await api.post('/subtitle/batch_download', { files })
   return data
 }
 

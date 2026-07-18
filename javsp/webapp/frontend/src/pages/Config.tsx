@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import {
   Card, Form, Input, Button, Switch, Select, InputNumber,
-  Typography, Tabs, Space, Spin, Tag, Tooltip, Alert, Table, Modal, App, Empty
+  Typography, Tabs, Space, Spin, Tag, Tooltip, Alert, Table, Modal, App, Empty, Divider
 } from 'antd'
 import {
   SaveOutlined, SettingOutlined, PlusOutlined, DeleteOutlined,
@@ -1186,6 +1186,10 @@ function SubtitleConfig({ saving, onSave }: { saving: boolean; onSave: (v: any) 
         subtitle_concurrency: s.subtitle_concurrency ?? 1,
         segment_duration: s.segment_duration ?? 30,
         filter_fillers: s.filter_fillers ?? false,
+        subtitle_search_xunlei_api_url: s.subtitle_search_xunlei_api_url ?? 'https://api-shoulei-ssl.xunlei.com/oracle/subtitle',
+        subtitle_search_shooter_api_url: s.subtitle_search_shooter_api_url ?? 'https://www.shooter.cn/api/subapi.php',
+        subtitle_search_preferred_languages: s.subtitle_search_preferred_languages ?? ['zh', 'cht', 'en'],
+        auto_download_subtitle: s.auto_download_subtitle ?? true,
       })
     }).finally(() => setLoading(false))
   }, [])
@@ -1263,6 +1267,42 @@ function SubtitleConfig({ saving, onSave }: { saving: boolean; onSave: (v: any) 
           <Form.Item
             label={<span>过滤语气词<Tip text="过滤只包含语气词/拟声词的字幕片段（如ああ、ははは等），只保留实际对话内容" /></span>}
             name="filter_fillers" valuePropName="checked"
+          >
+            <Switch />
+          </Form.Item>
+          <Divider plain>字幕搜索</Divider>
+          <Form.Item
+            label={<span>迅雷字幕搜索 API<Tip text="留空则使用默认地址" /></span>}
+            name="subtitle_search_xunlei_api_url"
+          >
+            <Input placeholder="https://api-shoulei-ssl.xunlei.com/oracle/subtitle" />
+          </Form.Item>
+          <Form.Item
+            label={<span>射手网字幕搜索 API<Tip text="留空则使用默认地址" /></span>}
+            name="subtitle_search_shooter_api_url"
+          >
+            <Input placeholder="https://www.shooter.cn/api/subapi.php" />
+          </Form.Item>
+          <Form.Item
+            label={<span>字幕语言偏好<Tip text="排在前面的语言优先下载。可选项：zh=中文，cht=繁体，en=英文，jp=日文，ko=韩文" /></span>}
+            name="subtitle_search_preferred_languages"
+          >
+            <Select
+              mode="tags"
+              options={[
+                { value: 'zh', label: 'zh 中文（简体）' },
+                { value: 'cht', label: 'cht 中文（繁体）' },
+                { value: 'en', label: 'en 英文' },
+                { value: 'jp', label: 'jp 日文' },
+                { value: 'ko', label: 'ko 韩文' },
+              ]}
+              placeholder="按优先级选择或输入语言代码"
+            />
+          </Form.Item>
+          <Divider plain>刮削联动</Divider>
+          <Form.Item
+            label={<span>刮削后自动下载字幕<Tip text="刮削任务完成后，自动为刮削成功的影片搜索并下载字幕。关闭则跳过字幕下载" /></span>}
+            name="auto_download_subtitle" valuePropName="checked"
           >
             <Switch />
           </Form.Item>

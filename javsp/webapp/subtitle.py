@@ -1,6 +1,7 @@
 """字幕生成模块 - 音轨提取 + mlx-whisper 语音识别 + 翻译"""
 
 import os
+import re
 import json
 import subprocess
 import logging
@@ -8,6 +9,8 @@ import threading
 import platform
 import time
 from pathlib import Path
+
+from javsp.webapp.subtitle_search import safe_write_file
 
 logger = logging.getLogger('javsp.webapp.subtitle')
 
@@ -493,37 +496,38 @@ def _format_ass_time(seconds: float) -> str:
 
 def _write_srt(segments: list, output_path: str, subtitle_mode: str = 'original'):
     """写入 SRT 格式字幕"""
-    with open(output_path, 'w', encoding='utf-8') as f:
-        for i, seg in enumerate(segments, 1):
-            start = _format_srt_time(seg['start'])
-            end = _format_srt_time(seg['end'])
-            if subtitle_mode == 'chinese':
-                text = seg.get('trans_text', seg['text']).strip()
-            elif subtitle_mode == 'bilingual':
-                original = seg['text'].strip()
-                translated = seg.get('trans_text', '').strip()
-                text = f"{original}\n{translated}" if translated else original
-            else:
-                text = seg['text'].strip()
-            f.write(f"{i}\n{start} --> {end}\n{text}\n\n")
+    lines = []
+    for i, seg in enumerate(segments, 1):
+        start = _format_srt_time(seg['start'])
+        end = _format_srt_time(seg['end'])
+        if subtitle_mode == 'chinese':
+            text = seg.get('trans_text', seg['text']).strip()
+        elif subtitle_mode == 'bilingual':
+            original = seg['text'].strip()
+            translated = seg.get('trans_text', '').strip()
+            text = f"{original}\n{translated}" if translated else original
+        else:
+            text = seg['text'].strip()
+        lines.append(f"{i}\n{start} --> {end}\n{text}\n\n")
+    safe_write_file(output_path, ''.join(lines), 'w', encoding='utf-8')
 
 
 def _write_vtt(segments: list, output_path: str, subtitle_mode: str = 'original'):
     """写入 VTT 格式字幕"""
-    with open(output_path, 'w', encoding='utf-8') as f:
-        f.write("WEBVTT\n\n")
-        for i, seg in enumerate(segments, 1):
-            start = _format_srt_time(seg['start']).replace(',', '.')
-            end = _format_srt_time(seg['end']).replace(',', '.')
-            if subtitle_mode == 'chinese':
-                text = seg.get('trans_text', seg['text']).strip()
-            elif subtitle_mode == 'bilingual':
-                original = seg['text'].strip()
-                translated = seg.get('trans_text', '').strip()
-                text = f"{original}\n{translated}" if translated else original
-            else:
-                text = seg['text'].strip()
-            f.write(f"{i}\n{start} --> {end}\n{text}\n\n")
+    lines = ["WEBVTT\n\n"]
+    for i, seg in enumerate(segments, 1):
+        start = _format_srt_time(seg['start']).replace(',', '.')
+        end = _format_srt_time(seg['end']).replace(',', '.')
+        if subtitle_mode == 'chinese':
+            text = seg.get('trans_text', seg['text']).strip()
+        elif subtitle_mode == 'bilingual':
+            original = seg['text'].strip()
+            translated = seg.get('trans_text', '').strip()
+            text = f"{original}\n{translated}" if translated else original
+        else:
+            text = seg['text'].strip()
+        lines.append(f"{i}\n{start} --> {end}\n{text}\n\n")
+    safe_write_file(output_path, ''.join(lines), 'w', encoding='utf-8')
 
 
 def _write_ass(segments: list, output_path: str, subtitle_mode: str = 'original'):
@@ -542,21 +546,21 @@ Style: Default,Noto Sans CJK JP,48,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-
 [Events]
 Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
 """
-    with open(output_path, 'w', encoding='utf-8') as f:
-        f.write(header)
-        for seg in segments:
-            start = _format_ass_time(seg['start'])
-            end = _format_ass_time(seg['end'])
-            if subtitle_mode == 'chinese':
-                text = seg.get('trans_text', seg['text']).strip()
-            elif subtitle_mode == 'bilingual':
-                original = seg['text'].strip()
-                translated = seg.get('trans_text', '').strip()
-                text = f"{original}\\N{translated}" if translated else original
-            else:
-                text = seg['text'].strip()
-            text = text.replace('\n', '\\N')
-            f.write(f"Dialogue: 0,{start},{end},Default,,0,0,0,,{text}\n")
+    lines = [header]
+    for seg in segments:
+        start = _format_ass_time(seg['start'])
+        end = _format_ass_time(seg['end'])
+        if subtitle_mode == 'chinese':
+            text = seg.get('trans_text', seg['text']).strip()
+        elif subtitle_mode == 'bilingual':
+            original = seg['text'].strip()
+            translated = seg.get('trans_text', '').strip()
+            text = f"{original}\\N{translated}" if translated else original
+        else:
+            text = seg['text'].strip()
+        text = text.replace('\n', '\\N')
+        lines.append(f"Dialogue: 0,{start},{end},Default,,0,0,0,,{text}\n")
+    safe_write_file(output_path, ''.join(lines), 'w', encoding='utf-8')
 
 
 def _write_debug_txt(segments: list, output_path: str):
@@ -995,6 +999,45 @@ SUBTITLE_EXTENSIONS = {'.srt', '.ass', '.ssa'}
 AUDIO_EXTENSIONS = {'.wav'}
 
 
+def _is_subtitle_related_suffix(suffix: str) -> bool:
+    """判断字幕文件名后缀是否像语言标记或音轨标记（如 zh、zh-CN、track0.ja）"""
+    if not suffix:
+        return False
+    lower = suffix.lower()
+    # 音轨标记
+    if re.match(r'^track\d+(\..+)?$', lower):
+        return True
+    # 语言标记
+    from javsp.webapp.subtitle_search import _map_language_to_code
+    if _map_language_to_code(lower):
+        return True
+    return False
+
+
+def _find_local_subtitles(video_path: str) -> list[str]:
+    """查找视频同目录下与视频相关的所有本地字幕文件（支持 .zh、_zh、-zh-CN 等标记）"""
+    video_dir = os.path.dirname(video_path)
+    stem = Path(video_path).stem
+    result = []
+    if not os.path.isdir(video_dir):
+        return result
+    for filename in os.listdir(video_dir):
+        name, ext = os.path.splitext(filename)
+        if ext.lower() not in SUBTITLE_EXTENSIONS:
+            continue
+        # 完全匹配
+        if name.lower() == stem.lower():
+            result.append(os.path.join(video_dir, filename))
+            continue
+        # 必须以 stem + 分隔符 开头
+        m = re.match(rf'^{re.escape(stem)}([._-])(.+)$', name, re.I)
+        if not m:
+            continue
+        if _is_subtitle_related_suffix(m.group(2)):
+            result.append(os.path.join(video_dir, filename))
+    return result
+
+
 def scan_media_files(path: str, check_exists: bool = True) -> list:
     """扫描目录下的媒体文件。check_exists=True 时跳过不存在的文件"""
     from javsp.webapp.database import get_config
@@ -1006,7 +1049,6 @@ def scan_media_files(path: str, check_exists: bool = True) -> list:
 
     files = []
     ignored_patterns = config.get('scanner', {}).get('ignored_folder_name_pattern', [])
-    import re
     ignored_res = []
     for pat in ignored_patterns:
         try:
@@ -1020,19 +1062,13 @@ def scan_media_files(path: str, check_exists: bool = True) -> list:
             dirnames.clear()
             continue
 
-        dir_files = {}
+        # 只按精确 stem 收集音轨文件
+        dir_files: dict[str, dict] = {}
         for filename in filenames:
             ext = os.path.splitext(filename)[1].lower()
             stem = os.path.splitext(filename)[0]
-            filepath = os.path.join(dirpath, filename)
-            if ext in SUBTITLE_EXTENSIONS:
-                if stem not in dir_files:
-                    dir_files[stem] = {'subtitles': [], 'audio': None}
-                dir_files[stem]['subtitles'].append(filepath)
-            elif ext in AUDIO_EXTENSIONS:
-                if stem not in dir_files:
-                    dir_files[stem] = {'subtitles': [], 'audio': None}
-                dir_files[stem]['audio'] = filepath
+            if ext in AUDIO_EXTENSIONS:
+                dir_files.setdefault(stem, {'audio': None})['audio'] = os.path.join(dirpath, filename)
 
         for filename in filenames:
             ext = os.path.splitext(filename)[1].lower()
@@ -1044,20 +1080,18 @@ def scan_media_files(path: str, check_exists: bool = True) -> list:
             try:
                 fsize = os.path.getsize(filepath)
                 stem = os.path.splitext(filename)[0]
-                dir_info = dir_files.get(stem, {'subtitles': [], 'audio': None})
-                
-                local_subtitle_path = None
-                if dir_info['subtitles']:
-                    local_subtitle_path = dir_info['subtitles'][0]
-                
+                local_subtitles = _find_local_subtitles(filepath)
+                local_subtitle_path = local_subtitles[0] if local_subtitles else None
+                audio_path = dir_files.get(stem, {}).get('audio')
+
                 files.append({
                     'path': filepath,
                     'basename': filename,
                     'dir': dirpath,
                     'size': fsize,
                     'local_subtitle_path': local_subtitle_path,
-                    'local_audio_path': dir_info['audio'],
-                    'subtitle_count': len(dir_info['subtitles']),
+                    'local_audio_path': audio_path,
+                    'subtitle_count': len(local_subtitles),
                 })
             except OSError:
                 continue
@@ -1619,22 +1653,44 @@ def batch_search_subtitles(files: list) -> dict:
     return {'ok': True, 'total': total_count, 'success': success_count, 'failed': fail_count}
 
 
-def download_selected_subtitle(video_path: str, video_dir: str, video_basename: str, subtitle_result: dict) -> dict:
-    """下载选中的字幕文件，保持与大模型生成一致的命名规则"""
-    from javsp.webapp.subtitle_search import download_subtitle
-    
+def _has_local_subtitle(video_path: str) -> bool:
+    """检查视频同目录下是否已存在相关字幕文件（支持 .zh、_zh、-zh-CN 等标记）"""
+    return len(_find_local_subtitles(video_path)) > 0
+
+
+def download_selected_subtitle(video_path: str, video_dir: str, video_basename: str, subtitle_result: dict = None) -> dict:
+    """下载选中的字幕文件；若未指定 subtitle_result，则自动从搜索结果中选择最佳匹配"""
+    from javsp.webapp.subtitle_search import download_subtitle, select_best_subtitle
+    from javsp.webapp.database import get_subtitle_search_results, update_subtitle_scan_local_subtitles
+
     if not os.path.exists(video_path):
         return {'ok': False, 'errors': '视频文件不存在'}
-    
+
+    # 兼容前端未传 video_dir/video_basename 的情况
+    if not video_dir:
+        video_dir = os.path.dirname(video_path)
+    if not video_basename:
+        video_basename = os.path.basename(video_path)
+
     try:
+        # 未指定字幕时，自动选择最佳匹配
+        if subtitle_result is None:
+            cached_results = get_subtitle_search_results(video_path)
+            subtitle_result = select_best_subtitle(cached_results)
+            if subtitle_result is None:
+                return {'ok': False, 'errors': '没有可用的字幕搜索结果，无法自动匹配'}
+
         stem = Path(video_basename).stem
         fmt = 'srt'
         save_path = os.path.join(video_dir, f"{stem}.{fmt}")
-        
+
         result = download_subtitle(subtitle_result['url'], save_path)
-        
+
         if result['ok']:
             logger.info(f"字幕下载成功: {video_basename} -> {result['path']}")
+            # 同步更新扫描结果缓存
+            current_subs = _find_local_subtitles(video_path)
+            update_subtitle_scan_local_subtitles(video_path, current_subs[0] if current_subs else result['path'], len(current_subs))
             return {
                 'ok': True,
                 'subtitle_path': result['path'],
@@ -1643,61 +1699,227 @@ def download_selected_subtitle(video_path: str, video_dir: str, video_basename: 
             }
         else:
             return {'ok': False, 'errors': result['errors']}
-    
+
     except Exception as e:
         logger.error(f"下载字幕异常: {video_path} - {e}")
         return {'ok': False, 'errors': str(e)}
 
 
+def batch_download_subtitles(files: list) -> dict:
+    """批量下载字幕：已有字幕跳过，匹配偏好语言自动下载，未匹配时默认下载第一条"""
+    from javsp.webapp.subtitle_search import (
+        search_subtitle, select_best_subtitle, download_subtitle,
+        _get_preferred_languages, _detect_subtitle_language,
+    )
+    from javsp.webapp.database import update_subtitle_scan_local_subtitles, update_subtitle_search_status
+
+    results = []
+    counts = {
+        'total': len(files),
+        'has_subtitle': 0,
+        'auto_downloaded': 0,
+        'needs_manual': 0,
+        'no_results': 0,
+        'error': 0,
+    }
+
+    for f in files:
+        video_path = f.get('video_path') or f.get('path')
+        video_dir = f.get('video_dir') or f.get('dir')
+        video_basename = f.get('video_basename') or f.get('basename')
+
+        if not video_path or not os.path.exists(video_path):
+            counts['error'] += 1
+            update_subtitle_search_status(video_path, 'error')
+            results.append({
+                'video_path': video_path,
+                'video_basename': video_basename,
+                'status': 'error',
+                'message': '视频文件不存在',
+            })
+            continue
+
+        # 兼容前端未传 video_dir/video_basename 的情况
+        if not video_dir:
+            video_dir = os.path.dirname(video_path)
+        if not video_basename:
+            video_basename = os.path.basename(video_path)
+
+        # 已有本地字幕则跳过，并同步更新扫描结果缓存
+        existing_subs = _find_local_subtitles(video_path)
+        if existing_subs:
+            counts['has_subtitle'] += 1
+            update_subtitle_scan_local_subtitles(video_path, existing_subs[0], len(existing_subs))
+            update_subtitle_search_status(video_path, 'found')
+            results.append({
+                'video_path': video_path,
+                'video_basename': video_basename,
+                'status': 'has_subtitle',
+                'message': '已有本地字幕',
+            })
+            continue
+
+        # 搜索字幕
+        try:
+            search_result = search_subtitle(video_path)
+        except Exception as e:
+            counts['error'] += 1
+            update_subtitle_search_status(video_path, 'error')
+            results.append({
+                'video_path': video_path,
+                'video_basename': video_basename,
+                'status': 'error',
+                'message': f'搜索失败: {e}',
+            })
+            continue
+
+        if not search_result:
+            counts['no_results'] += 1
+            update_subtitle_search_status(video_path, 'not_found')
+            results.append({
+                'video_path': video_path,
+                'video_basename': video_basename,
+                'status': 'no_results',
+                'message': '未搜索到字幕',
+            })
+            continue
+
+        best = select_best_subtitle(search_result)
+        if not best:
+            counts['no_results'] += 1
+            update_subtitle_search_status(video_path, 'not_found', search_result)
+            results.append({
+                'video_path': video_path,
+                'video_basename': video_basename,
+                'status': 'no_results',
+                'message': '未找到合适的字幕',
+            })
+            continue
+
+        # 判断最佳匹配语言是否在偏好列表中（综合 language 字段和 filename 字段）
+        preferred = _get_preferred_languages()
+        best_lang_code = _detect_subtitle_language(best)
+        matched_preferred = bool(best_lang_code and best_lang_code in preferred)
+
+        # 优先匹配偏好语言；未匹配时默认下载第一条结果
+        stem = Path(video_basename).stem
+        save_path = os.path.join(video_dir, f"{stem}.srt")
+        dl_result = download_subtitle(best['url'], save_path)
+        if dl_result['ok']:
+            counts['auto_downloaded'] += 1
+            # 下载成功后重新扫描该视频的字幕文件并同步缓存
+            current_subs = _find_local_subtitles(video_path)
+            update_subtitle_scan_local_subtitles(video_path, current_subs[0] if current_subs else save_path, len(current_subs))
+            update_subtitle_search_status(video_path, 'found', search_result)
+            results.append({
+                'video_path': video_path,
+                'video_basename': video_basename,
+                'status': 'auto_downloaded',
+                'subtitle_path': save_path,
+                'source': best['source'],
+                'language': best['language'],
+                'message': '已自动下载' if matched_preferred else '未匹配偏好语言，已默认下载第一条字幕',
+            })
+        else:
+            counts['error'] += 1
+            update_subtitle_search_status(video_path, 'error', search_result)
+            results.append({
+                'video_path': video_path,
+                'video_basename': video_basename,
+                'status': 'error',
+                'message': dl_result['errors'],
+            })
+
+    return {'ok': True, 'counts': counts, 'results': results}
+
+
 def batch_delete_audio(files: list) -> dict:
     """批量删除音轨文件"""
+    from javsp.webapp.database import get_subtitle_task_items_by_video
+
     deleted = 0
     skipped = 0
     failed = 0
-    
+
     for f in files:
-        audio_path = f.get('local_audio_path') or f.get('audio_path')
-        if not audio_path:
+        video_path = f.get('video_path') or f.get('path')
+        audio_paths = []
+
+        # 优先从 file 对象中找
+        direct_path = f.get('local_audio_path') or f.get('audio_path')
+        if direct_path:
+            audio_paths.append(direct_path)
+
+        # 如果 file 对象没有，根据 video_path 查询字幕任务明细
+        if not audio_paths and video_path:
+            try:
+                items = get_subtitle_task_items_by_video(video_path)
+                for item in items:
+                    p = item.get('audio_path')
+                    if p and p not in audio_paths:
+                        audio_paths.append(p)
+            except Exception as e:
+                logger.warning(f"查询视频音轨路径失败: {video_path} - {e}")
+
+        if not audio_paths:
             skipped += 1
             continue
-        
-        if not os.path.exists(audio_path):
-            skipped += 1
-            continue
-        
-        try:
-            os.remove(audio_path)
-            deleted += 1
-            logger.info(f"音轨文件已删除: {audio_path}")
-        except Exception as e:
-            failed += 1
-            logger.error(f"删除音轨文件失败: {audio_path} - {e}")
-    
+
+        for audio_path in audio_paths:
+            if not os.path.exists(audio_path):
+                continue
+            try:
+                os.remove(audio_path)
+                deleted += 1
+                logger.info(f"音轨文件已删除: {audio_path}")
+            except Exception as e:
+                failed += 1
+                logger.error(f"删除音轨文件失败: {audio_path} - {e}")
+
     return {'ok': True, 'deleted': deleted, 'skipped': skipped, 'failed': failed}
 
 
 def batch_delete_subtitle(files: list) -> dict:
-    """批量删除字幕文件"""
+    """批量删除字幕文件（会删除同目录下所有相关字幕）"""
+    from javsp.webapp.database import update_subtitle_scan_local_subtitles
+
     deleted = 0
     skipped = 0
     failed = 0
-    
+
     for f in files:
-        subtitle_path = f.get('local_subtitle_path')
-        if not subtitle_path:
+        video_path = f.get('path') or f.get('video_path')
+        subtitle_paths = []
+
+        # 优先使用扫描时记录的本地字幕路径
+        direct_path = f.get('local_subtitle_path')
+        if direct_path:
+            subtitle_paths.append(direct_path)
+
+        # 同时按规则查找所有相关字幕文件
+        if video_path:
+            for p in _find_local_subtitles(video_path):
+                if p not in subtitle_paths:
+                    subtitle_paths.append(p)
+
+        if not subtitle_paths:
             skipped += 1
             continue
-        
-        if not os.path.exists(subtitle_path):
-            skipped += 1
-            continue
-        
-        try:
-            os.remove(subtitle_path)
-            deleted += 1
-            logger.info(f"字幕文件已删除: {subtitle_path}")
-        except Exception as e:
-            failed += 1
-            logger.error(f"删除字幕文件失败: {subtitle_path} - {e}")
-    
+
+        for subtitle_path in subtitle_paths:
+            if not os.path.exists(subtitle_path):
+                continue
+            try:
+                os.remove(subtitle_path)
+                deleted += 1
+                logger.info(f"字幕文件已删除: {subtitle_path}")
+            except Exception as e:
+                failed += 1
+                logger.error(f"删除字幕文件失败: {subtitle_path} - {e}")
+
+        # 同步更新扫描结果缓存
+        if video_path:
+            remaining_subs = _find_local_subtitles(video_path)
+            update_subtitle_scan_local_subtitles(video_path, remaining_subs[0] if remaining_subs else None, len(remaining_subs))
+
     return {'ok': True, 'deleted': deleted, 'skipped': skipped, 'failed': failed}

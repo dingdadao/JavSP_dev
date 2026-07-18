@@ -144,6 +144,8 @@ test
 *.db
 .javsp_task_history.json
 .check8
+.javsp_web.pid
+javsp_web.log
 
 # Node
 node_modules/

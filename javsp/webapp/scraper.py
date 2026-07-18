@@ -211,6 +211,7 @@ def run_scrape_task(task_id: str, source: str, dest: str,
         # 收集每项结果用于最终摘要
         results_success = []
         results_failed = []
+        success_movies = []
         db_config = get_config()
 
         for idx, movie in enumerate(movies):
@@ -274,6 +275,7 @@ def run_scrape_task(task_id: str, source: str, dest: str,
                     update_task_item(item_id, status='success', dest_path=result['dest_path'],
                                      scraped_data=result.get('data'), finished_at=time.strftime('%Y-%m-%d %H:%M:%S'))
                     success_count += 1
+                    success_movies.append(movie)
                     results_success.append({
                         'dvdid': dvdid,
                         'source': movie.files[0] if movie.files else '',
@@ -331,6 +333,11 @@ def run_scrape_task(task_id: str, source: str, dest: str,
                 f'任务 {task_id[:8]} 完成: 成功 {success_count}, 失败 {failed_count}' +
                 (f', 未识别 {unrecognized_count}' if unrecognized_count else ''))
 
+        # 刮削完成后自动下载字幕（根据配置开关）
+        subtitle_config = db_config.get('subtitle', {})
+        if success_movies and subtitle_config.get('auto_download_subtitle', True):
+            _download_subtitles_after_scrape(success_movies, task_id, emit_progress)
+
         # 清理全局会话
         try:
             close_global_session()
@@ -344,22 +351,79 @@ def run_scrape_task(task_id: str, source: str, dest: str,
         add_log('ERROR', 'scraper', f'任务 {task_id[:8]} 异常: {str(e)}')
 
 
-def _check_file_integrity(filepath: str) -> tuple[bool, str]:
-    """使用 ffmpeg 检查视频文件完整性"""
+def _download_subtitles_after_scrape(movies: list, task_id: str, emit_progress):
+    """刮削完成后为成功的影片自动下载字幕"""
+    from javsp.webapp.subtitle import batch_download_subtitles, VIDEO_EXTENSIONS
+
+    files = []
+    for movie in movies:
+        for f in (movie.files or []):
+            ext = os.path.splitext(f)[1].lower()
+            if ext in VIDEO_EXTENSIONS:
+                files.append({'video_path': f})
+
+    if not files:
+        return
+
+    emit_progress({
+        'task_id': task_id,
+        'status': 'subtitle_downloading',
+        'message': f'刮削完成，正在为 {len(files)} 个视频下载字幕...'
+    })
+
     try:
-        result = subprocess.run(
+        result = batch_download_subtitles(files)
+        counts = result.get('counts', {})
+        auto = counts.get('auto_downloaded', 0)
+        has = counts.get('has_subtitle', 0)
+        no_results = counts.get('no_results', 0)
+        error = counts.get('error', 0)
+
+        emit_progress({
+            'task_id': task_id,
+            'status': 'subtitle_download_done',
+            'message': f'字幕下载完成：自动 {auto}，已有 {has}，无结果 {no_results}，失败 {error}'
+        })
+        add_log('INFO', 'scraper',
+                f'任务 {task_id[:8]} 字幕下载完成: 自动 {auto}, 已有 {has}, 无结果 {no_results}, 失败 {error}')
+    except Exception as e:
+        logger.exception("刮削后字幕下载异常")
+        emit_progress({
+            'task_id': task_id,
+            'status': 'subtitle_download_error',
+            'message': f'字幕下载失败: {e}'
+        })
+        add_log('ERROR', 'scraper', f'任务 {task_id[:8]} 字幕下载失败: {e}')
+
+
+def _check_file_integrity(filepath: str) -> tuple[bool, str]:
+    """使用 ffmpeg 检查视频文件完整性，支持被停止信号中断"""
+    try:
+        proc = subprocess.Popen(
             ['ffmpeg', '-v', 'error', '-i', filepath, '-f', 'null', '-'],
-            capture_output=True, text=True, timeout=300
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
-        if result.returncode != 0 or result.stderr.strip():
-            error_msg = result.stderr.strip() or f'ffmpeg 返回码: {result.returncode}'
+        start = time.time()
+        while True:
+            ret = proc.poll()
+            if ret is not None:
+                break
+            if is_stop_requested():
+                proc.kill()
+                return False, '用户停止'
+            if time.time() - start > 300:
+                proc.kill()
+                return False, 'ffmpeg 检查超时'
+            time.sleep(0.5)
+
+        stdout, stderr = proc.communicate(timeout=5)
+        if ret != 0 or stderr.strip():
+            error_msg = stderr.strip() or f'ffmpeg 返回码: {ret}'
             return False, error_msg
         return True, ''
     except FileNotFoundError:
         logger.warning('ffmpeg 未安装，跳过文件完整性检查')
         return True, ''
-    except subprocess.TimeoutExpired:
-        return False, 'ffmpeg 检查超时'
     except Exception as e:
         return False, f'ffmpeg 检查异常: {e}'
 
@@ -381,6 +445,10 @@ def _scrape_single(movie, translate: bool, dest_path: str, move_files: bool, mai
     }
 
     try:
+        if is_stop_requested():
+            result['message'] = '用户停止'
+            return result
+
         # 并行抓取数据
         all_info = main_module.parallel_crawler(movie)
         if not all_info:
@@ -391,6 +459,10 @@ def _scrape_single(movie, translate: bool, dest_path: str, move_files: bool, mai
         success = main_module.info_summary(movie, all_info)
         if not success:
             result['message'] = '数据汇总失败'
+            return result
+
+        if is_stop_requested():
+            result['message'] = '用户停止'
             return result
 
         # 翻译
@@ -450,8 +522,16 @@ def _scrape_single(movie, translate: bool, dest_path: str, move_files: bool, mai
             except Exception as e:
                 logger.warning(f"剧照处理异常 {movie.dvdid}: {e}")
 
+        if is_stop_requested():
+            result['message'] = '用户停止'
+            return result
+
         # 写入 NFO
         write_nfo(movie.info, movie.nfo_file)
+
+        if is_stop_requested():
+            result['message'] = '用户停止'
+            return result
 
         # 使用 movie.rename_files 移动/重命名文件（与命令行逻辑一致）
         root = os.path.dirname(movie.files[0]) if movie.files else None
